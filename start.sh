@@ -1,0 +1,75 @@
+#!/bin/bash
+set -e
+
+echo "🎯 企微自动结束会话 - 一键启动"
+echo "================================"
+echo ""
+
+# 检查 Python 3
+if ! command -v python3 &> /dev/null; then
+    echo "❌ Python 3 未安装"
+    echo "请运行: brew install python3"
+    exit 1
+fi
+echo "✅ Python 3: $(python3 --version)"
+
+# 创建并使用虚拟环境
+echo "📦 检查 Python 虚拟环境..."
+if [ ! -d ".venv" ]; then
+    echo "🛠️  创建虚拟环境 .venv ..."
+    python3 -m venv .venv
+fi
+
+VENV_PY="$(pwd)/.venv/bin/python"
+VENV_PIP="$(pwd)/.venv/bin/pip"
+
+echo "📦 安装 Python 依赖到虚拟环境..."
+"$VENV_PIP" install --quiet --upgrade pip setuptools wheel 2>/dev/null || true
+"$VENV_PIP" install websocket-client requests pyobjc pyyaml playwright || {
+    echo "❌ 虚拟环境依赖安装失败"
+    exit 1
+}
+"$VENV_PY" -m playwright install chromium >/dev/null 2>&1 || true
+echo "✅ Python 依赖已安装到 .venv"
+
+# 检查 Whistle
+if ! command -v w2 &> /dev/null; then
+    echo "📦 安装 Whistle..."
+    if command -v npm &> /dev/null; then
+        npm install -g whistle
+    else
+        echo "❌ npm 未安装，请先安装 Node.js"
+        exit 1
+    fi
+fi
+echo "✅ Whistle: $(w2 --version)"
+
+# 启动 Whistle
+echo "🚀 启动 Whistle..."
+w2 start 2>/dev/null || echo "⚠️  Whistle 可能已在运行"
+sleep 2
+echo "✅ Whistle 已启动"
+
+# 检查证书
+echo "🔐 检查 Whistle 证书..."
+if ! security find-certificate -c "Whistle" &>/dev/null; then
+    echo "⚠️  证书未安装，正在安装..."
+    CERT_PATH="/tmp/whistle-rootca.crt"
+    curl -s http://127.0.0.1:8899/cgi-bin/rootca > "$CERT_PATH"
+    
+    echo "💡 需要输入密码来安装证书..."
+    sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain "$CERT_PATH" && {
+        echo "✅ 证书已安装"
+    } || {
+        echo "❌ 证书安装失败，请手动安装"
+    }
+else
+    echo "✅ 证书已安装"
+fi
+
+# 启动主程序
+echo ""
+echo "🎯 启动监控程序..."
+echo ""
+"$VENV_PY" full_auto.py
+

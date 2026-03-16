@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.DS_Store
+.venv/
+logs/
+credentials.local.yaml
+data/.cookies.json
+data/.qiyu_cookies.json
