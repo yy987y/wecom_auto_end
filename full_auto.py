@@ -47,6 +47,8 @@ class WeChatAutoFlow:
         self.token = None
         self.session_cookie = None
         self.cached_sessions = []  # 缓存会话列表
+        self.session_mapping_file = self.script_dir / 'data' / 'session_mapping.txt'
+        self.session_mapping = self.load_session_mapping()
 
     def start_whistle(self):
         logger.info('🚀 启动 Whistle...')
@@ -56,6 +58,38 @@ class WeChatAutoFlow:
             logger.info('✅ Whistle 已启动')
         except Exception as e:
             logger.warning(f'⚠️ Whistle 启动异常/可能已运行: {e}')
+
+    def load_session_mapping(self):
+        """加载群名->sessionId映射"""
+        mapping = {}
+        if not self.session_mapping_file.exists():
+            return mapping
+        try:
+            with open(self.session_mapping_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith('#'):
+                        continue
+                    if ':' in line:
+                        group_name, session_id = line.split(':', 1)
+                        mapping[group_name.strip()] = session_id.strip()
+            logger.info(f'📖 加载了 {len(mapping)} 条会话映射')
+        except Exception as e:
+            logger.error(f'加载会话映射失败: {e}')
+        return mapping
+
+    def save_session_mapping(self):
+        """保存群名->sessionId映射"""
+        try:
+            self.session_mapping_file.parent.mkdir(exist_ok=True)
+            with open(self.session_mapping_file, 'w', encoding='utf-8') as f:
+                f.write('# 群名 -> sessionId 映射\n')
+                f.write('# 自动生成，请勿手动编辑\n\n')
+                for group_name, session_id in sorted(self.session_mapping.items()):
+                    f.write(f'{group_name}: {session_id}\n')
+            logger.debug(f'💾 已保存 {len(self.session_mapping)} 条会话映射')
+        except Exception as e:
+            logger.error(f'保存会话映射失败: {e}')
 
     def get_focused_window(self):
         app = find_wecom_app()
@@ -183,10 +217,17 @@ class WeChatAutoFlow:
             logger.warning('最近请求中未发现 qiyukf.com')
         logger.debug(f'提取结果: sessions={len(sessions)}, token={bool(self.token)}, cookie={bool(self.session_cookie)}')
         
-        # 如果提取到会话列表，更新缓存
+        # 如果提取到会话列表，更新缓存和映射
         if sessions:
             self.cached_sessions = sessions
             logger.info(f'📦 已缓存 {len(sessions)} 个会话')
+            # 更新映射（假设会话名称就是群名）
+            for session in sessions:
+                session_name = session.get('name', '')
+                session_id = session.get('id', '')
+                if session_name and session_id:
+                    self.session_mapping[session_name] = session_id
+            self.save_session_mapping()
         
         return sessions
 
@@ -293,8 +334,14 @@ class WeChatAutoFlow:
             logger.warning('刷新后仍未提取到会话列表，尝试使用缓存')
             sessions = self.cached_sessions
         if not sessions:
-            logger.error('未从 Whistle 提取到会话列表，且缓存为空')
-            return
+            logger.warning('缓存也为空，尝试从映射文件查找当前群的 sessionId')
+            if group_name in self.session_mapping:
+                session_id = self.session_mapping[group_name]
+                sessions = [{'id': session_id, 'name': group_name}]
+                logger.info(f'✅ 从映射找到会话: {group_name} -> {session_id}')
+            else:
+                logger.error(f'未找到群 "{group_name}" 的 sessionId 映射')
+                return
 
         success = self.close_sessions(sessions)
         logger.info(f'✅ 本轮关闭完成: {success}/{len(sessions)}')
