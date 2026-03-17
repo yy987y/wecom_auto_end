@@ -105,69 +105,94 @@ def get_group_name(focused):
     return scored[0][1] if scored else None
 
 def get_messages(focused, debug=False):
-    # 先滚动到底部，确保最新消息可见
-    scroll_to_bottom()
+    # 新策略：查找 AXScrollArea，然后找所有文本元素，按 y 坐标排序
+    scroll_areas = walk_collect(focused, lambda el: role(el) == 'AXScrollArea', max_depth=10)
     
-    tables = walk_collect(focused, lambda el: role(el) == 'AXTable', max_depth=10)
-    scored = []
-    for table, path in tables:
-        rows = walk_collect(table, lambda el: role(el) == 'AXRow', max_depth=3)
-        row_els = [r for r, _ in rows]
-        if len(row_els) < 3:
+    if debug:
+        print(f'\n🔍 DEBUG: 找到 {len(scroll_areas)} 个 AXScrollArea')
+    
+    # 找到最可能是聊天区域的 ScrollArea（通常是最大的）
+    best_scroll = None
+    for scroll, path in scroll_areas:
+        # 跳过侧边栏等小区域
+        if 'window.0.26' in path:  # 侧边栏
             continue
-        score = 0
-        if path.startswith('window.0.31.9.0.0.0'): score += 50
-        elif path.startswith('window.0.31.9'): score += 35
-        if path.startswith('window.0.26'): score -= 50
-        # 优先选择行数最多的 table（通常包含最新消息）
-        score += len(row_els)
-        scored.append((score, row_els))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    if not scored:
+        if best_scroll is None:
+            best_scroll = scroll
+    
+    if not best_scroll:
+        if debug:
+            print('❌ 未找到聊天区域')
         return []
     
-    all_rows = scored[0][1]
+    # 收集所有文本元素（AXStaticText）
+    all_texts = []
     
-    # Debug 模式：对比两种方案
+    def collect_texts(el, depth=0, max_depth=15):
+        if depth > max_depth:
+            return
+        
+        r = role(el)
+        # 收集文本元素
+        if r in ['AXStaticText', 'AXTextArea', 'AXTextField']:
+            text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXDescriptionAttribute)
+            if text and len(text) > 1:
+                # 尝试获取位置信息
+                try:
+                    from ApplicationServices import AXUIElementCopyAttributeValue, kAXPositionAttribute
+                    pos_val = AXUIElementCopyAttributeValue(el, kAXPositionAttribute, None)
+                    if pos_val[0] == 0 and pos_val[1]:
+                        y = pos_val[1].pointValue().y
+                        all_texts.append((y, text, el))
+                except:
+                    # 没有位置信息，使用默认
+                    all_texts.append((0, text, el))
+        
+        # 递归子元素
+        children = ax_children(el)
+        for child in children[:100]:  # 限制数量
+            collect_texts(child, depth + 1, max_depth)
+    
+    collect_texts(best_scroll)
+    
     if debug:
-        print(f'\n🔍 DEBUG: 找到 {len(scored)} 个 table，选择评分最高的（{len(all_rows)} 行）')
-        
-        # 方案1：所有消息
-        print('\n📋 方案1：所有消息')
-        parsed_all = []
-        for i, row in enumerate(all_rows):
-            tokens = flatten_texts(row, max_depth=6)
-            if len(tokens) >= 2:
-                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
-                parsed_all.append(msg)
-                if i >= len(all_rows) - 5:  # 只打印最后5条
-                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
-        
-        # 方案2：最后20条
-        print('\n📋 方案2：最后20条')
-        recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
-        parsed_recent = []
-        for i, row in enumerate(recent_rows):
-            tokens = flatten_texts(row, max_depth=6)
-            if len(tokens) >= 2:
-                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
-                parsed_recent.append(msg)
-                if i >= len(recent_rows) - 5:  # 只打印最后5条
-                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
-        
-        print(f'\n✅ 方案1总数: {len(parsed_all)}, 方案2总数: {len(parsed_recent)}\n')
+        print(f'📝 收集到 {len(all_texts)} 个文本元素')
     
-    # 只取最后 20 条消息（最新的）
-    recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
+    # 按 y 坐标排序（越下面 y 越大）
+    all_texts.sort(key=lambda x: x[0])
     
-    parsed = []
-    for row in recent_rows:
-        tokens = flatten_texts(row, max_depth=6)
-        if len(tokens) >= 2:
-            parsed.append({'sender': tokens[0] if len(tokens) > 0 else None, 
-                          'content': ' '.join(tokens[1:]) if len(tokens) > 1 else None,
-                          'body': ' '.join(tokens)})
-    return parsed
+    # 取最后 20 个
+    recent_texts = all_texts[-20:] if len(all_texts) > 20 else all_texts
+    
+    if debug:
+        print(f'📝 最后 20 个文本元素：')
+        for i, (y, text, _) in enumerate(recent_texts[-10:], 1):
+            print(f'  {i}. (y={y:.0f}) {text[:80]}')
+    
+    # 简单解析：相邻的文本可能是 发送者 + 内容
+    messages = []
+    i = 0
+    while i < len(recent_texts):
+        _, text1, _ = recent_texts[i]
+        
+        # 如果下一个文本存在，尝试组合
+        if i + 1 < len(recent_texts):
+            _, text2, _ = recent_texts[i + 1]
+            messages.append({
+                'sender': text1,
+                'content': text2,
+                'body': f'{text1}: {text2}'
+            })
+            i += 2
+        else:
+            messages.append({
+                'sender': '',
+                'content': text1,
+                'body': text1
+            })
+            i += 1
+    
+    return messages
 
 def main():
     if not AXIsProcessTrustedWithOptions({'AXTrustedCheckOptionPrompt': True}):
