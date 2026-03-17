@@ -6,6 +6,7 @@ import time
 import json
 import sys
 import select
+import subprocess
 from pathlib import Path
 from AppKit import NSWorkspace
 from ApplicationServices import (
@@ -44,6 +45,21 @@ def ax_children(element):
 
 def role(el):
     return ax_str(el, kAXRoleAttribute) or '-'
+
+def scroll_to_bottom():
+    """模拟按下 Cmd+Down 滚动到底部"""
+    try:
+        script = '''
+        tell application "System Events"
+            tell process "WeCom"
+                keystroke (key code 125 using command down)
+            end tell
+        end tell
+        '''
+        subprocess.run(['osascript', '-e', script], capture_output=True, timeout=2)
+        time.sleep(0.3)
+    except Exception:
+        pass
 
 def find_wecom_app():
     for app in NSWorkspace.sharedWorkspace().runningApplications():
@@ -99,6 +115,9 @@ def get_group_name(focused):
     return scored[0][1] if scored else None
 
 def get_messages(focused, debug=False):
+    # 先滚动到底部，确保最新消息可见
+    scroll_to_bottom()
+    
     tables = walk_collect(focused, lambda el: role(el) == 'AXTable', max_depth=10)
     scored = []
     for table, path in tables:
