@@ -34,7 +34,7 @@ VENV_PIP="$(pwd)/.venv/bin/pip"
 
 echo "📦 安装 Python 依赖到虚拟环境..."
 "$VENV_PIP" install --quiet --upgrade pip setuptools wheel 2>/dev/null || true
-"$VENV_PIP" install websocket-client requests pyobjc pyyaml playwright || {
+"$VENV_PIP" install --trusted-host pypi.org --trusted-host files.pythonhosted.org websocket-client requests pyobjc pyyaml playwright || {
     echo "❌ 虚拟环境依赖安装失败"
     exit 1
 }
