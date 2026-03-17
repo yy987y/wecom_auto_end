@@ -599,8 +599,8 @@ class WeChatAutoFlow:
                     logger.info(f'💬 检测到新消息: {group_name}')
                     last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
-                    # 等待 UI 更新完成
-                    time.sleep(1)
+                    # 等待 UI 更新完成（增加到 2 秒）
+                    time.sleep(2)
                     self.run_once()
                 # 首次进入该群
                 elif group_name not in last_message_hash:
