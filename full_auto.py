@@ -232,6 +232,32 @@ class WeChatAutoFlow:
                 except Exception as e:
                     logger.error(f'解析 Whistle 会话响应失败: {e}')
             
+            # 最新会话接口（最可靠）
+            if 'session/latest' in req_url:
+                logger.info('🎯 发现最新会话接口')
+                res = item.get('res', {}) or {}
+                base64_body = res.get('base64')
+                if base64_body:
+                    try:
+                        decoded = base64.b64decode(base64_body).decode('utf-8')
+                        payload = json.loads(decoded)
+                        if payload.get('code') == 200:
+                            result = payload.get('result', {})
+                            session_id = result.get('id')
+                            if session_id:
+                                timestamp = item.get('startTime', 0)
+                                logger.info(f'✅ 从 latest 接口获取到当前会话: {session_id}')
+                                # 最新会话接口最可靠，放在最前面
+                                sessions.insert(0, {
+                                    'id': session_id,
+                                    'name': 'latest',
+                                    'timestamp': timestamp,
+                                    'is_current': True,
+                                    'is_latest': True
+                                })
+                    except Exception as e:
+                        logger.error(f'解析 latest 接口失败: {e}')
+            
             # 会话详情接口（更准确，包含当前查看的会话）
             if 'session/chat/detail' in req_url or 'sessionId=' in req_url:
                 try:
@@ -409,18 +435,25 @@ class WeChatAutoFlow:
                 logger.error(f'未找到群 "{group_name}" 的 sessionId 映射')
                 return
 
-        # 只关闭当前会话（优先使用标记为 is_current 的）
+        # 只关闭当前会话（优先使用 latest 接口的）
         target_session = None
         for session in sessions:
-            if session.get('is_current'):
+            if session.get('is_latest'):
                 target_session = session
-                logger.info(f'🎯 找到当前会话: {session["id"]}')
+                logger.info(f'🎯 使用 latest 接口的会话: {session["id"]}')
                 break
+        
+        if not target_session:
+            for session in sessions:
+                if session.get('is_current'):
+                    target_session = session
+                    logger.info(f'🎯 使用标记为 current 的会话: {session["id"]}')
+                    break
         
         if not target_session and sessions:
             # 如果没有明确标记，使用最新的（第一个）
             target_session = sessions[0]
-            logger.warning(f'⚠️ 未找到明确的当前会话，使用第一个: {target_session["id"]}')
+            logger.warning(f'⚠️ 未找到明确标记，使用第一个: {target_session["id"]}')
         
         if not target_session:
             logger.error('未找到可关闭的会话')
