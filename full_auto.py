@@ -573,12 +573,12 @@ class WeChatAutoFlow:
                 
                 current_time = time.time()
                 
-                # 计算最后一条消息的哈希
+                # 计算消息列表的哈希（所有消息，不只是最后一条）
                 current_hash = None
                 if messages:
-                    last_msg = messages[-1]
-                    msg_text = str(last_msg.get('sender', '')) + str(last_msg.get('content', ''))
-                    current_hash = hash(msg_text)
+                    # 使用所有消息的内容计算哈希
+                    all_msg_text = ''.join([str(m.get('sender', '')) + str(m.get('content', '')) for m in messages])
+                    current_hash = hash(all_msg_text)
                 
                 # 会话切换
                 if group_name != self.current_group:
@@ -596,11 +596,14 @@ class WeChatAutoFlow:
                         time.sleep(2)
                         continue
                     
-                    logger.info(f'💬 检测到新消息: {group_name}')
+                    logger.info(f'💬 检测到消息变化: {group_name}（消息数: {len(messages)}）')
                     last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
                     # 等待 UI 更新完成（增加到 2 秒）
                     time.sleep(2)
+                    # 重新读取一次，尝试获取最新消息
+                    _, messages = self.get_current_context()
+                    logger.info(f'📝 重新读取后消息数: {len(messages)}')
                     self.run_once()
                 # 首次进入该群
                 elif group_name not in last_message_hash:
