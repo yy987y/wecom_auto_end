@@ -543,7 +543,7 @@ class WeChatAutoFlow:
         logger.info(f'🎛️ 网易智企就绪检查结果: {ready}')
 
         logger.info('👀 开始监听当前企微会话...')
-        last_message_count = {}  # 记录每个群的消息数量
+        last_message_hash = {}  # 记录每个群的最后一条消息哈希
         last_check_time = {}  # 记录每个群的最后检查时间
         
         while True:
@@ -553,18 +553,24 @@ class WeChatAutoFlow:
                     time.sleep(2)
                     continue
                 
-                current_msg_count = len(messages)
                 current_time = time.time()
+                
+                # 计算最后一条消息的哈希
+                current_hash = None
+                if messages:
+                    last_msg = messages[-1]
+                    msg_text = str(last_msg.get('sender', '')) + str(last_msg.get('content', ''))
+                    current_hash = hash(msg_text)
                 
                 # 会话切换
                 if group_name != self.current_group:
                     logger.info(f'🔄 检测到会话切换: {self.current_group} -> {group_name}')
                     self.current_group = group_name
-                    last_message_count[group_name] = current_msg_count
+                    last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
                     self.run_once()
-                # 当前会话消息数量变化（有新消息）
-                elif group_name in last_message_count and current_msg_count > last_message_count[group_name]:
+                # 最后一条消息内容变化（有新消息）
+                elif current_hash and group_name in last_message_hash and current_hash != last_message_hash[group_name]:
                     # 冷却时间：距离上次检查至少 5 秒
                     time_since_last_check = current_time - last_check_time.get(group_name, 0)
                     if time_since_last_check < 5:
@@ -572,15 +578,15 @@ class WeChatAutoFlow:
                         time.sleep(2)
                         continue
                     
-                    logger.info(f'💬 检测到新消息: {group_name} ({last_message_count[group_name]} -> {current_msg_count})')
-                    last_message_count[group_name] = current_msg_count
+                    logger.info(f'💬 检测到新消息: {group_name}')
+                    last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
                     # 等待 UI 更新完成
                     time.sleep(1)
                     self.run_once()
                 # 首次进入该群
-                elif group_name not in last_message_count:
-                    last_message_count[group_name] = current_msg_count
+                elif group_name not in last_message_hash:
+                    last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
                 
                 time.sleep(2)
