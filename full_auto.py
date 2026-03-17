@@ -396,9 +396,21 @@ class WeChatAutoFlow:
         if len(messages) < 3:
             logger.info(f'当前会话消息过少({len(messages)})，跳过: {group_name}')
             return
+        
+        # 检查消息是否有效（过滤界面元素）
+        valid_messages = []
+        for msg in messages:
+            content = msg.get('content', '') or msg.get('body', '')
+            # 过滤无效内容：界面元素、空消息、纯数字等
+            if content and len(content) > 5 and not content.lower() in ['badge', 'number', 'gray', 'button']:
+                valid_messages.append(msg)
+        
+        if len(valid_messages) < 2:
+            logger.info(f'当前会话有效消息过少({len(valid_messages)})，跳过: {group_name}')
+            return
 
         logger.info(f'📍 当前群/会话: {group_name}')
-        status, confidence, reason = self.judge_current_chat(group_name, messages)
+        status, confidence, reason = self.judge_current_chat(group_name, valid_messages)
         logger.info(f'最终判断: {status} / {confidence:.2f} / {reason}')
 
         if status != 'strong_end_candidate':
