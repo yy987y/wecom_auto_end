@@ -207,10 +207,27 @@ class WeChatAutoFlow:
                         if row.get('status') == 1:
                             sessions.append({
                                 'id': row.get('id'),
-                                'name': ((row.get('user') or {}).get('realname') or 'unknown')
+                                'name': ((row.get('user') or {}).get('realname') or 'unknown'),
+                                'timestamp': item.get('startTime', 0)  # 记录请求时间
                             })
                 except Exception as e:
                     logger.error(f'解析 Whistle 会话响应失败: {e}')
+            
+            # 会话详情接口（更准确，包含当前查看的会话）
+            if 'session/chat/detail' in req_url or 'sessionId=' in req_url:
+                try:
+                    if 'sessionId=' in req_url:
+                        session_id = req_url.split('sessionId=')[1].split('&')[0]
+                        logger.info(f'🎯 从请求 URL 提取到 sessionId: {session_id}')
+                        # 将当前会话放在列表最前面
+                        sessions.insert(0, {
+                            'id': session_id,
+                            'name': 'current',
+                            'timestamp': item.get('startTime', 0),
+                            'is_current': True
+                        })
+                except Exception as e:
+                    logger.debug(f'提取 sessionId 失败: {e}')
 
         logger.info(f'Whistle qiyukf 请求数: {qiyu_count}')
         if qiyu_count == 0:
@@ -343,8 +360,25 @@ class WeChatAutoFlow:
                 logger.error(f'未找到群 "{group_name}" 的 sessionId 映射')
                 return
 
-        success = self.close_sessions(sessions)
-        logger.info(f'✅ 本轮关闭完成: {success}/{len(sessions)}')
+        # 只关闭当前会话（优先使用标记为 is_current 的）
+        target_session = None
+        for session in sessions:
+            if session.get('is_current'):
+                target_session = session
+                logger.info(f'🎯 找到当前会话: {session["id"]}')
+                break
+        
+        if not target_session and sessions:
+            # 如果没有明确标记，使用最新的（第一个）
+            target_session = sessions[0]
+            logger.warning(f'⚠️ 未找到明确的当前会话，使用第一个: {target_session["id"]}')
+        
+        if not target_session:
+            logger.error('未找到可关闭的会话')
+            return
+
+        success = self.close_sessions([target_session])
+        logger.info(f'✅ 本轮关闭完成: {success}/1')
 
     def run(self):
         if not AXIsProcessTrustedWithOptions({'AXTrustedCheckOptionPrompt': True}):
