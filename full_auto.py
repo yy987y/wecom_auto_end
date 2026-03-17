@@ -237,12 +237,13 @@ class WeChatAutoFlow:
                 try:
                     if 'sessionId=' in req_url:
                         session_id = req_url.split('sessionId=')[1].split('&')[0]
-                        logger.info(f'🎯 从请求 URL 提取到 sessionId: {session_id}')
-                        # 将当前会话放在列表最前面
+                        timestamp = item.get('startTime', 0)
+                        logger.debug(f'🎯 从请求 URL 提取到 sessionId: {session_id} (时间: {timestamp})')
+                        # 将当前会话放在列表最前面，并记录时间戳
                         sessions.insert(0, {
                             'id': session_id,
                             'name': 'current',
-                            'timestamp': item.get('startTime', 0),
+                            'timestamp': timestamp,
                             'is_current': True
                         })
                 except Exception as e:
@@ -251,6 +252,14 @@ class WeChatAutoFlow:
         logger.info(f'Whistle qiyukf 请求数: {qiyu_count}')
         if qiyu_count == 0:
             logger.warning('最近请求中未发现 qiyukf.com')
+        
+        # 按时间戳排序，最新的在前面
+        if sessions:
+            sessions.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+            logger.info(f'📋 提取到 {len(sessions)} 个会话，已按时间排序')
+            if sessions[0].get('is_current'):
+                logger.info(f'🎯 最新会话 ID: {sessions[0]["id"]}')
+        
         logger.debug(f'提取结果: sessions={len(sessions)}, token={bool(self.token)}, cookie={bool(self.session_cookie)}')
         
         # 如果提取到会话列表，更新缓存和映射
