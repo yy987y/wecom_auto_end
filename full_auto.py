@@ -49,6 +49,8 @@ class WeChatAutoFlow:
         self.cached_sessions = []  # 缓存会话列表
         self.session_mapping_file = self.script_dir / 'data' / 'session_mapping.txt'
         self.session_mapping = self.load_session_mapping()
+        self.code = None  # 企业代码
+        self.full_cookies = {}  # 完整的 Cookie
 
     def start_whistle(self):
         logger.info('🚀 启动 Whistle...')
@@ -179,14 +181,31 @@ class WeChatAutoFlow:
             # cookie
             req_headers = item.get('req', {}).get('headers', {}) or {}
             cookie_str = req_headers.get('cookie', '') or req_headers.get('Cookie', '') or ''
-            if 'QIYUFIXED_SESSIONID_QW=' in cookie_str and not self.session_cookie:
+            if cookie_str:
+                # 解析所有 Cookie
+                for part in cookie_str.split(';'):
+                    part = part.strip()
+                    if '=' in part:
+                        key, value = part.split('=', 1)
+                        self.full_cookies[key] = value
+                
+                # 提取关键 Cookie
+                if 'QIYUFIXED_SESSIONID_QW=' in cookie_str and not self.session_cookie:
+                    try:
+                        for part in cookie_str.split(';'):
+                            part = part.strip()
+                            if part.startswith('QIYUFIXED_SESSIONID_QW='):
+                                self.session_cookie = part.split('=', 1)[1]
+                                logger.info(f'🍪 获取到 session cookie: {self.session_cookie[:12]}...')
+                                break
+                    except Exception:
+                        pass
+            
+            # 提取 code 参数
+            if 'code=' in req_url and not self.code:
                 try:
-                    for part in cookie_str.split(';'):
-                        part = part.strip()
-                        if part.startswith('QIYUFIXED_SESSIONID_QW='):
-                            self.session_cookie = part.split('=', 1)[1]
-                            logger.info(f'🍪 获取到 session cookie: {self.session_cookie[:12]}...')
-                            break
+                    self.code = req_url.split('code=')[1].split('&')[0]
+                    logger.info(f'🏢 获取到 code: {self.code}')
                 except Exception:
                     pass
 
@@ -274,23 +293,44 @@ class WeChatAutoFlow:
             logger.warning('没有 token，无法关闭')
             return 0
 
-        cookies = {'___csrfToken': self.token}
-        if self.session_cookie:
-            cookies['QIYUFIXED_SESSIONID_QW'] = self.session_cookie
-
         success = 0
-        url = 'https://qw.qiyukf.com/chat/api/session/closeWXCSSession'
+        base_url = 'https://qw.qiyukf.com/chat/api/session/closeWXCSSession'
+        
         for session in sessions:
+            # 构造 URL 参数
+            url = base_url
+            params = []
+            if self.code:
+                params.append(f'code={self.code}')
+            if self.token:
+                params.append(f'token={self.token}')
+            if params:
+                url = f'{base_url}?{"&".join(params)}'
+            
             body = {
                 'sessionId': session['id'],
                 'groupManageId': self.group_manage_id
             }
+            
+            # 使用完整的 Cookie
+            cookies = self.full_cookies.copy() if self.full_cookies else {}
+            if not cookies.get('___csrfToken') and self.token:
+                cookies['___csrfToken'] = self.token
+            
             try:
-                logger.info(f'🔄 关闭会话: {session["name"]} / {session["id"]}')
+                logger.info(f'🔄 关闭会话: {session.get("name", "unknown")} / {session["id"]}')
+                logger.debug(f'URL: {url}')
+                logger.debug(f'Cookies: {len(cookies)} 个')
                 r = requests.post(url, data=body, cookies=cookies, verify=False, timeout=8)
+                logger.debug(f'响应: {r.status_code} - {r.text[:200]}')
+                
                 if r.status_code == 200:
-                    success += 1
-                    logger.info('  ✅ 成功')
+                    resp_data = r.json()
+                    if resp_data.get('code') == 200:
+                        success += 1
+                        logger.info('  ✅ 成功')
+                    else:
+                        logger.warning(f'  ❌ 失败: {resp_data.get("message", "unknown")}')
                 else:
                     logger.warning(f'  ❌ 失败 HTTP {r.status_code}: {r.text[:200]}')
             except Exception as e:
