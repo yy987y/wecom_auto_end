@@ -614,6 +614,10 @@ class WeChatAutoFlow:
                         app, focused = self.get_focused_window()
                         if focused:
                             group_name_tmp = get_group_name(focused)
+                            # 确保还是同一个群
+                            if group_name_tmp != group_name:
+                                logger.warning(f'  采样 {i+1}/4: 群名变化（{group_name} -> {group_name_tmp}），跳过')
+                                continue
                             msgs = get_messages(focused, debug=False)
                         else:
                             msgs = []
@@ -626,6 +630,11 @@ class WeChatAutoFlow:
                             logger.info(f'  采样 {i+1}/4 (延迟{delay}s): {len(msgs)} 条 | 最后: [{last.get("sender")}] {last.get("content", "")[:50]}')
                         else:
                             logger.info(f'  采样 {i+1}/4 (延迟{delay}s): 0 条消息')
+                    
+                    if not attempts:
+                        logger.warning('所有采样都失败，跳过判断')
+                        time.sleep(2)
+                        continue
                     
                     # 选择策略：优先选消息数最多的
                     best_messages = max(attempts, key=len)
