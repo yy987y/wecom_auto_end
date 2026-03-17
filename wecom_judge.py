@@ -9,7 +9,9 @@ import re
 THANK_WORDS = ['谢谢', '感谢', '辛苦', '多谢', '谢了']
 CONFIRM_WORDS = ['好的', 'ok', 'OK', '可以', '明白', '收到', '行', '好']
 PROMISE_WORDS = ['确认后答复', '稍后答复', '稍后回复', '明天回复', '下周一', '周五我们会提供', 
-                 '会提供', '安排研发处理', '让研发处理', '跟进后同步', '确认后回你']
+                 '会提供', '安排研发处理', '让研发处理', '跟进后同步', '确认后回你',
+                 '有结论随时同步', '有结论同步', '随时同步', '确认后同步', '处理后同步',
+                 '稍后联系', '明天联系', '后续跟进', '持续跟进']
 SOLVED_WORDS = ['已修复', '已经修复', '解决了', '已处理', '可以了', '恢复正常', '已经解决']
 NEW_QUESTION_WORDS = ['还有个问题', '另外问', '再问一下', '顺便问', '还有一个']
 
@@ -60,8 +62,8 @@ def calculate_end_score(messages):
         text = msg.get('content') or msg.get('body') or ''
         if is_my_side(sender):
             if contains_keywords(text, PROMISE_WORDS):
-                score += 2
-                reasons.append('我方承诺')
+                score += 4  # 提高权重，直接触发关闭
+                reasons.append('我方明确承诺')
             if contains_keywords(text, SOLVED_WORDS):
                 score += 2
                 reasons.append('我方已解决')
