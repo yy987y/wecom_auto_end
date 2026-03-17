@@ -179,9 +179,44 @@ def get_messages_by_ocr():
 def main():
     """测试"""
     print('🔍 使用 OCR 读取企微消息...')
-    messages = get_messages_by_ocr()
     
-    print(f'\n📝 读取到 {len(messages)} 条消息：')
+    # 查找企微窗口
+    window = find_wecom_window()
+    if not window:
+        print('❌ 未找到企微窗口')
+        return
+    
+    print(f'✅ 找到窗口: {window.get("kCGWindowName")}')
+    bounds = window['kCGWindowBounds']
+    print(f'📐 窗口位置: x={bounds["X"]}, y={bounds["Y"]}, w={bounds["Width"]}, h={bounds["Height"]}')
+    
+    # 截取底部区域
+    image = capture_window_bottom(window, height=500)
+    if not image:
+        print('❌ 截图失败')
+        return
+    
+    print('✅ 截图成功')
+    
+    # 保存到临时文件
+    temp_file = Path(tempfile.gettempdir()) / 'wecom_chat.png'
+    save_image_to_file(image, temp_file)
+    print(f'💾 截图保存到: {temp_file}')
+    
+    # OCR 识别
+    print('🔍 开始 OCR 识别...')
+    lines = ocr_image_with_vision(temp_file)
+    print(f'📝 识别到 {len(lines)} 行文本')
+    
+    if lines:
+        print('\n原始 OCR 结果：')
+        for i, line in enumerate(lines[:20], 1):
+            print(f'  {i}. {line}')
+    
+    # 解析消息
+    messages = parse_messages_from_ocr(lines)
+    
+    print(f'\n📝 解析出 {len(messages)} 条消息：')
     for i, msg in enumerate(messages[-5:], 1):
         print(f'{i}. [{msg["sender"]}] {msg["content"][:50]}')
 
