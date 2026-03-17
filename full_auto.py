@@ -46,6 +46,7 @@ class WeChatAutoFlow:
         self.last_whistle_id = None
         self.token = None
         self.session_cookie = None
+        self.cached_sessions = []  # 缓存会话列表
 
     def start_whistle(self):
         logger.info('🚀 启动 Whistle...')
@@ -181,6 +182,12 @@ class WeChatAutoFlow:
         if qiyu_count == 0:
             logger.warning('最近请求中未发现 qiyukf.com')
         logger.debug(f'提取结果: sessions={len(sessions)}, token={bool(self.token)}, cookie={bool(self.session_cookie)}')
+        
+        # 如果提取到会话列表，更新缓存
+        if sessions:
+            self.cached_sessions = sessions
+            logger.info(f'📦 已缓存 {len(sessions)} 个会话')
+        
         return sessions
 
     def judge_current_chat(self, group_name, messages):
@@ -268,7 +275,10 @@ class WeChatAutoFlow:
         logger.info('进入结束会话链路...')
         sessions = self.extract_qiyu_context_from_whistle()
         if not sessions:
-            logger.error('未从 Whistle 提取到会话列表')
+            logger.warning('本次未提取到会话列表，尝试使用缓存')
+            sessions = self.cached_sessions
+        if not sessions:
+            logger.error('未从 Whistle 提取到会话列表，且缓存为空')
             return
 
         success = self.close_sessions(sessions)
