@@ -273,24 +273,28 @@ class WeChatAutoFlow:
             return
 
         logger.info('进入结束会话链路...')
-        sessions = self.extract_qiyu_context_from_whistle()
-        if not sessions:
-            logger.warning('本次未提取到会话列表，尝试使用缓存')
-            sessions = self.cached_sessions
-        if not sessions:
-            logger.warning('缓存也为空，尝试刷新侧边栏获取最新数据...')
+        
+        # 企微切换会话后侧边栏内容会重置，需要重新点击网易智企
+        logger.info('🔄 重新切换到网易智企以刷新数据...')
+        refresh_ok, _ = run_swift('wecom_click_netease.swift')
+        if refresh_ok:
+            logger.info('✅ 已切换到网易智企')
+            time.sleep(3)  # 等待请求产生
+        else:
+            logger.warning('⚠️ 切换网易智企失败，尝试完整刷新侧边栏')
             refresh_ok, _ = open_sidebar_and_qiyu(wait_seconds=3)
-            if refresh_ok:
-                time.sleep(2)
-                sessions = self.extract_qiyu_context_from_whistle()
-                if sessions:
-                    logger.info(f'✅ 刷新后获取到 {len(sessions)} 个会话')
-                else:
-                    logger.error('刷新后仍未提取到会话列表')
-                    return
-            else:
+            if not refresh_ok:
                 logger.error('刷新侧边栏失败')
                 return
+            time.sleep(2)
+        
+        sessions = self.extract_qiyu_context_from_whistle()
+        if not sessions:
+            logger.warning('刷新后仍未提取到会话列表，尝试使用缓存')
+            sessions = self.cached_sessions
+        if not sessions:
+            logger.error('未从 Whistle 提取到会话列表，且缓存为空')
+            return
 
         success = self.close_sessions(sessions)
         logger.info(f'✅ 本轮关闭完成: {success}/{len(sessions)}')
