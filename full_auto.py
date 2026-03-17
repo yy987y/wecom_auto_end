@@ -544,6 +544,7 @@ class WeChatAutoFlow:
 
         logger.info('👀 开始监听当前企微会话...')
         last_message_count = {}  # 记录每个群的消息数量
+        last_check_time = {}  # 记录每个群的最后检查时间
         
         while True:
             try:
@@ -553,23 +554,34 @@ class WeChatAutoFlow:
                     continue
                 
                 current_msg_count = len(messages)
+                current_time = time.time()
                 
                 # 会话切换
                 if group_name != self.current_group:
                     logger.info(f'🔄 检测到会话切换: {self.current_group} -> {group_name}')
                     self.current_group = group_name
                     last_message_count[group_name] = current_msg_count
+                    last_check_time[group_name] = current_time
                     self.run_once()
                 # 当前会话消息数量变化（有新消息）
                 elif group_name in last_message_count and current_msg_count > last_message_count[group_name]:
+                    # 冷却时间：距离上次检查至少 5 秒
+                    time_since_last_check = current_time - last_check_time.get(group_name, 0)
+                    if time_since_last_check < 5:
+                        logger.debug(f'⏰ 冷却中，跳过判断（距上次 {time_since_last_check:.1f}s）')
+                        time.sleep(2)
+                        continue
+                    
                     logger.info(f'💬 检测到新消息: {group_name} ({last_message_count[group_name]} -> {current_msg_count})')
                     last_message_count[group_name] = current_msg_count
+                    last_check_time[group_name] = current_time
                     # 等待 UI 更新完成
                     time.sleep(1)
                     self.run_once()
                 # 首次进入该群
                 elif group_name not in last_message_count:
                     last_message_count[group_name] = current_msg_count
+                    last_check_time[group_name] = current_time
                 
                 time.sleep(2)
             except KeyboardInterrupt:
