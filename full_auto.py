@@ -51,6 +51,7 @@ class WeChatAutoFlow:
         self.session_mapping = self.load_session_mapping()
         self.code = None  # 企业代码
         self.full_cookies = {}  # 完整的 Cookie
+        self.group_last_check = {}  # 记录每个群的最后检查时间和最后消息发送者
 
     def start_whistle(self):
         logger.info('🚀 启动 Whistle...')
@@ -410,6 +411,39 @@ class WeChatAutoFlow:
             return
 
         logger.info(f'📍 当前群/会话: {group_name}')
+        
+        # 检查超时：最后一条消息是我方发送，且超过 20 分钟无回复
+        if valid_messages:
+            last_msg = valid_messages[-1]
+            last_sender = last_msg.get('sender', '')
+            
+            # 判断是否是我方发送（根据发送者名称判断）
+            is_our_message = any(keyword in last_sender for keyword in ['客服', '技术支持', '网易', '智企'])
+            
+            # 更新或检查该群的最后检查时间
+            current_time = time.time()
+            if group_name not in self.group_last_check:
+                # 首次检查，记录时间和发送者
+                self.group_last_check[group_name] = {'time': current_time, 'is_our': is_our_message}
+            else:
+                last_check = self.group_last_check[group_name]
+                elapsed_minutes = (current_time - last_check['time']) / 60
+                
+                # 如果最后一条是我方消息，且超过 20 分钟，自动关闭
+                if last_check['is_our'] and is_our_message and elapsed_minutes >= 20:
+                    logger.info(f'⏰ 超时自动关闭：最后一条消息来自我方，已过 {elapsed_minutes:.1f} 分钟无客户回复')
+                    status, confidence, reason = 'strong_end_candidate', 0.9, f'超时自动关闭（{elapsed_minutes:.1f}分钟无回复）'
+                    logger.info(f'最终判断: {status} / {confidence:.2f} / {reason}')
+                    logger.info('进入结束会话链路...')
+                    self._execute_close_flow(group_name)
+                    # 重置记录
+                    del self.group_last_check[group_name]
+                    return
+                
+                # 如果发送者变化（客户回复了），更新记录
+                if last_check['is_our'] != is_our_message:
+                    self.group_last_check[group_name] = {'time': current_time, 'is_our': is_our_message}
+        
         status, confidence, reason = self.judge_current_chat(group_name, valid_messages)
         logger.info(f'最终判断: {status} / {confidence:.2f} / {reason}')
 
@@ -418,7 +452,10 @@ class WeChatAutoFlow:
             return
 
         logger.info('进入结束会话链路...')
-        
+        self._execute_close_flow(group_name)
+
+    def _execute_close_flow(self, group_name):
+        """执行关闭会话的完整流程"""
         # 企微切换会话后侧边栏内容会重置，需要重新点击网易智企
         logger.info('🔄 重新切换到网易智企以刷新数据...')
         refresh_ok, _ = run_swift('wecom_click_netease.swift')
