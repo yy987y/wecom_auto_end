@@ -611,11 +611,18 @@ class WeChatAutoFlow:
                             time.sleep(delay)
                         _, msgs = self.get_current_context()
                         attempts.append(msgs)
-                        logger.info(f'  采样 {i+1}/4 (延迟{delay}s): 读取到 {len(msgs)} 条消息')
+                        
+                        # 打印每次采样的最后一条消息
+                        if msgs:
+                            last = msgs[-1]
+                            logger.info(f'  采样 {i+1}/4 (延迟{delay}s): {len(msgs)} 条 | 最后: [{last.get("sender")}] {last.get("content", "")[:50]}')
+                        else:
+                            logger.info(f'  采样 {i+1}/4 (延迟{delay}s): 0 条消息')
                     
                     # 选择策略：优先选消息数最多的
                     best_messages = max(attempts, key=len)
-                    logger.info(f'✅ 最终选择: {len(best_messages)} 条消息（最多的那次）')
+                    best_index = attempts.index(best_messages)
+                    logger.info(f'✅ 最终选择: 采样 {best_index+1} 的结果（{len(best_messages)} 条消息）')
                     
                     # 使用最佳结果进行判断
                     self.run_once()
