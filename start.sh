@@ -32,14 +32,28 @@ fi
 VENV_PY="$(pwd)/.venv/bin/python"
 VENV_PIP="$(pwd)/.venv/bin/pip"
 
-echo "📦 安装 Python 依赖到虚拟环境..."
-"$VENV_PIP" install --quiet --upgrade pip setuptools wheel 2>/dev/null || true
-"$VENV_PIP" install --trusted-host pypi.org --trusted-host files.pythonhosted.org websocket-client requests pyobjc pyyaml playwright || {
-    echo "❌ 虚拟环境依赖安装失败"
-    exit 1
-}
-"$VENV_PY" -m playwright install chromium >/dev/null 2>&1 || true
-echo "✅ Python 依赖已安装到 .venv"
+# 检查依赖是否已安装
+echo "📦 检查 Python 依赖..."
+DEPS_OK=true
+for pkg in websocket-client requests pyobjc pyyaml playwright; do
+    if ! "$VENV_PY" -c "import ${pkg//-/_}" &>/dev/null 2>&1; then
+        DEPS_OK=false
+        break
+    fi
+done
+
+if [ "$DEPS_OK" = true ]; then
+    echo "✅ Python 依赖已就绪"
+else
+    echo "📦 安装缺失的 Python 依赖..."
+    "$VENV_PIP" install --quiet --upgrade pip setuptools wheel 2>/dev/null || true
+    "$VENV_PIP" install --trusted-host pypi.org --trusted-host files.pythonhosted.org websocket-client requests pyobjc pyyaml playwright || {
+        echo "❌ 虚拟环境依赖安装失败"
+        exit 1
+    }
+    "$VENV_PY" -m playwright install chromium >/dev/null 2>&1 || true
+    echo "✅ Python 依赖已安装"
+fi
 
 # 检查 Whistle
 if ! command -v w2 &> /dev/null; then
