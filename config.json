@@ -5,5 +5,6 @@
   "cookies": {
     "QIYUFIXED_SESSIONID_QW": "66195E3CC9944763BB5FDF002D8D1143",
     "___csrfToken": "IPHH3224Q9Q2826FXCUXXLD4TGMTTFSI"
-  }
+  },
+  "debug": false
 }

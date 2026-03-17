@@ -98,7 +98,7 @@ def get_group_name(focused):
     scored.sort(reverse=True)
     return scored[0][1] if scored else None
 
-def get_messages(focused):
+def get_messages(focused, debug=False):
     tables = walk_collect(focused, lambda el: role(el) == 'AXTable', max_depth=10)
     scored = []
     for table, path in tables:
@@ -117,8 +117,38 @@ def get_messages(focused):
     if not scored:
         return []
     
-    # 只取最后 20 条消息（最新的）
     all_rows = scored[0][1]
+    
+    # Debug 模式：对比两种方案
+    if debug:
+        print(f'\n🔍 DEBUG: 找到 {len(scored)} 个 table，选择评分最高的（{len(all_rows)} 行）')
+        
+        # 方案1：所有消息
+        print('\n📋 方案1：所有消息')
+        parsed_all = []
+        for i, row in enumerate(all_rows):
+            tokens = flatten_texts(row, max_depth=6)
+            if len(tokens) >= 2:
+                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
+                parsed_all.append(msg)
+                if i >= len(all_rows) - 5:  # 只打印最后5条
+                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
+        
+        # 方案2：最后20条
+        print('\n📋 方案2：最后20条')
+        recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
+        parsed_recent = []
+        for i, row in enumerate(recent_rows):
+            tokens = flatten_texts(row, max_depth=6)
+            if len(tokens) >= 2:
+                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
+                parsed_recent.append(msg)
+                if i >= len(recent_rows) - 5:  # 只打印最后5条
+                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
+        
+        print(f'\n✅ 方案1总数: {len(parsed_all)}, 方案2总数: {len(parsed_recent)}\n')
+    
+    # 只取最后 20 条消息（最新的）
     recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
     
     parsed = []

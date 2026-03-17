@@ -52,6 +52,19 @@ class WeChatAutoFlow:
         self.code = None  # 企业代码
         self.full_cookies = {}  # 完整的 Cookie
         self.group_last_check = {}  # 记录每个群的最后检查时间和最后消息发送者
+        
+        # 读取 debug 配置
+        config_file = self.script_dir / 'config.json'
+        self.debug = False
+        if config_file.exists():
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    self.debug = config.get('debug', False)
+                    if self.debug:
+                        logger.info('🐛 DEBUG 模式已开启')
+            except Exception as e:
+                logger.warning(f'读取 config.json 失败: {e}')
 
     def start_whistle(self):
         logger.info('🚀 启动 Whistle...')
@@ -111,7 +124,7 @@ class WeChatAutoFlow:
         if not focused:
             return None, []
         group_name = get_group_name(focused)
-        messages = get_messages(focused)
+        messages = get_messages(focused, debug=self.debug)
         logger.debug(f'当前群名: {group_name}')
         logger.debug(f'当前消息数: {len(messages)}')
         return group_name, messages
@@ -308,6 +321,10 @@ class WeChatAutoFlow:
         logger.info(f'本地判断: {status} / {confidence:.2f} / {reason}')
 
         if status == 'uncertain':
+            if self.debug:
+                logger.info('🐛 DEBUG 模式：跳过 Brainmaker 调用')
+                return 'not_end', 0.5, 'DEBUG模式跳过AI'
+            
             logger.info('本地判断不确定，调用 Brainmaker 兜底...')
             try:
                 from wecom_agent import call_brainmaker
