@@ -170,9 +170,17 @@ def call_brainmaker(group_name, messages):
 
         try:
             data = json.loads(json_str)
-        except Exception as e:
-            logger.error(f'→ Brainmaker JSON 解析失败: {e}; JSON片段: {json_str}')
-            return None
+        except json.JSONDecodeError as e:
+            logger.error(f'→ Brainmaker JSON 解析失败: {e}')
+            logger.error(f'→ JSON 原文: {repr(json_str)}')
+            # 尝试修复常见问题：替换中文引号、清理特殊字符
+            try:
+                fixed_json = json_str.replace('"', '"').replace('"', '"').replace(''', "'").replace(''', "'")
+                data = json.loads(fixed_json)
+                logger.info('✓ JSON 修复后解析成功')
+            except Exception as e2:
+                logger.error(f'→ JSON 修复后仍失败: {e2}')
+                return None
 
         logger.info(f'✓ Brainmaker 判断成功: {data}')
         record_call(model)
