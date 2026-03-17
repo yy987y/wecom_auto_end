@@ -278,8 +278,19 @@ class WeChatAutoFlow:
             logger.warning('本次未提取到会话列表，尝试使用缓存')
             sessions = self.cached_sessions
         if not sessions:
-            logger.error('未从 Whistle 提取到会话列表，且缓存为空')
-            return
+            logger.warning('缓存也为空，尝试刷新侧边栏获取最新数据...')
+            refresh_ok, _ = open_sidebar_and_qiyu(wait_seconds=3)
+            if refresh_ok:
+                time.sleep(2)
+                sessions = self.extract_qiyu_context_from_whistle()
+                if sessions:
+                    logger.info(f'✅ 刷新后获取到 {len(sessions)} 个会话')
+                else:
+                    logger.error('刷新后仍未提取到会话列表')
+                    return
+            else:
+                logger.error('刷新侧边栏失败')
+                return
 
         success = self.close_sessions(sessions)
         logger.info(f'✅ 本轮关闭完成: {success}/{len(sessions)}')
