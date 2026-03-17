@@ -564,6 +564,8 @@ class WeChatAutoFlow:
                 elif group_name in last_message_count and current_msg_count > last_message_count[group_name]:
                     logger.info(f'💬 检测到新消息: {group_name} ({last_message_count[group_name]} -> {current_msg_count})')
                     last_message_count[group_name] = current_msg_count
+                    # 等待 UI 更新完成
+                    time.sleep(1)
                     self.run_once()
                 # 首次进入该群
                 elif group_name not in last_message_count:
