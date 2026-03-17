@@ -18,6 +18,15 @@ echo "📦 检查 Python 虚拟环境..."
 if [ ! -d ".venv" ]; then
     echo "🛠️  创建虚拟环境 .venv ..."
     python3 -m venv .venv
+else
+    # 检查虚拟环境是否损坏（路径不匹配）
+    if [ -f ".venv/bin/python" ]; then
+        if ! .venv/bin/python --version &>/dev/null; then
+            echo "⚠️  虚拟环境损坏，重新创建..."
+            rm -rf .venv
+            python3 -m venv .venv
+        fi
+    fi
 fi
 
 VENV_PY="$(pwd)/.venv/bin/python"
