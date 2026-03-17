@@ -600,18 +600,22 @@ class WeChatAutoFlow:
                     last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
                     
-                    # 多次尝试读取，取消息最多的那次
-                    logger.info('🔄 开始多次尝试读取最新消息...')
+                    # 多次采样策略（参考 Grok/Gemini 建议）
+                    # 时间点：0ms、400ms、900ms、1200ms
+                    logger.info('🔄 开始多次采样读取最新消息...')
                     attempts = []
-                    for i in range(3):
-                        time.sleep(1)
+                    delays = [0, 0.4, 0.9, 1.2]
+                    
+                    for i, delay in enumerate(delays):
+                        if delay > 0:
+                            time.sleep(delay)
                         _, msgs = self.get_current_context()
                         attempts.append(msgs)
-                        logger.info(f'  尝试 {i+1}/3: 读取到 {len(msgs)} 条消息')
+                        logger.info(f'  采样 {i+1}/4 (延迟{delay}s): 读取到 {len(msgs)} 条消息')
                     
-                    # 选择消息最多的那次
+                    # 选择策略：优先选消息数最多的
                     best_messages = max(attempts, key=len)
-                    logger.info(f'✅ 最终使用: {len(best_messages)} 条消息')
+                    logger.info(f'✅ 最终选择: {len(best_messages)} 条消息（最多的那次）')
                     
                     # 使用最佳结果进行判断
                     self.run_once()
