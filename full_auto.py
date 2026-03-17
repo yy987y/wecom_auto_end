@@ -543,13 +543,32 @@ class WeChatAutoFlow:
         logger.info(f'🎛️ 网易智企就绪检查结果: {ready}')
 
         logger.info('👀 开始监听当前企微会话...')
+        last_message_count = {}  # 记录每个群的消息数量
+        
         while True:
             try:
-                group_name, _ = self.get_current_context()
-                if group_name and group_name != self.current_group:
+                group_name, messages = self.get_current_context()
+                if not group_name:
+                    time.sleep(2)
+                    continue
+                
+                current_msg_count = len(messages)
+                
+                # 会话切换
+                if group_name != self.current_group:
                     logger.info(f'🔄 检测到会话切换: {self.current_group} -> {group_name}')
                     self.current_group = group_name
+                    last_message_count[group_name] = current_msg_count
                     self.run_once()
+                # 当前会话消息数量变化（有新消息）
+                elif group_name in last_message_count and current_msg_count > last_message_count[group_name]:
+                    logger.info(f'💬 检测到新消息: {group_name} ({last_message_count[group_name]} -> {current_msg_count})')
+                    last_message_count[group_name] = current_msg_count
+                    self.run_once()
+                # 首次进入该群
+                elif group_name not in last_message_count:
+                    last_message_count[group_name] = current_msg_count
+                
                 time.sleep(2)
             except KeyboardInterrupt:
                 logger.info('👋 已退出')
