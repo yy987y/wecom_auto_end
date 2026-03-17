@@ -94,15 +94,31 @@ class WeChatAutoFlow:
                 logger.warning('⚠️ 当前未明确判定为已登录，继续结合 Whistle 结果判断')
 
             logger.info('⏳ 等待 qiyukf 请求产生...')
-            time.sleep(3)
-            sessions = self.extract_qiyu_context_from_whistle()
-            if sessions or self.token or self.session_cookie:
-                logger.info(f'✅ UI 就绪成功：token={bool(self.token)}, cookie={bool(self.session_cookie)}, sessions={len(sessions)}')
-                return True
-
-            logger.warning('本轮未检测到 qiyukf 请求或关键参数，尝试重置侧边栏后重试')
-            reset_sidebar()
-            time.sleep(1)
+            # 如果已经明确登录成功，等待更长时间
+            wait_time = 8 if login_ok else 3
+            for i in range(wait_time):
+                time.sleep(1)
+                sessions = self.extract_qiyu_context_from_whistle()
+                if sessions or self.token or self.session_cookie:
+                    logger.info(f'✅ UI 就绪成功：token={bool(self.token)}, cookie={bool(self.session_cookie)}, sessions={len(sessions)}')
+                    return True
+            
+            # 如果已经登录但没请求，可能是页面还没加载完，不要关闭侧边栏
+            if login_ok:
+                logger.warning('⚠️ 已登录但未检测到 qiyukf 请求，可能页面还在加载，继续等待...')
+                time.sleep(5)
+                sessions = self.extract_qiyu_context_from_whistle()
+                if sessions or self.token or self.session_cookie:
+                    logger.info(f'✅ UI 就绪成功：token={bool(self.token)}, cookie={bool(self.session_cookie)}, sessions={len(sessions)}')
+                    return True
+                logger.warning('⚠️ 仍未检测到请求，但保持侧边栏打开状态')
+                return True  # 已登录就认为就绪，后续监听时会自动产生请求
+            
+            # 未登录且无请求，才尝试重置
+            if attempt < max_retries:
+                logger.warning('本轮未检测到 qiyukf 请求或关键参数，尝试重置侧边栏后重试')
+                reset_sidebar()
+                time.sleep(1)
 
         return False
 
