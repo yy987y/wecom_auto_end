@@ -1,113 +1,154 @@
-# 企微自动结束会话 - 完整流程梳理
+# 企微自动结束会话 - 完整流程梳理 v1.5
 
 ## 📋 整体流程
 
 ### 阶段 1：启动初始化
 ```
-1. 用户运行：python3 full_auto.py
-2. 启动 Whistle 代理（w2 start）
-3. 建立 WebSocket 连接到 Whistle
-4. 开始监控企微窗口
+1. 用户运行：./start.sh
+2. 检查并安装依赖（仅首次或缺失时）
+3. 启动 Whistle 代理（w2 start）
+4. 强制进入"网易智企就绪态"
+   - 打开侧边栏
+   - 切换到网易智企
+   - 验证 qiyukf 请求已产生
+5. 开始监控企微窗口
 ```
 
-### 阶段 2：群切换检测
+### 阶段 2：会话切换检测
 ```
 循环执行（每 2 秒）：
-1. AppleScript 读取企微窗口标题
+1. 读取企微当前群名（Accessibility API）
 2. 对比上次记录的群名
 3. 如果群名变化 → 触发处理流程
 ```
 
-### 阶段 3：自动打开侧边栏
+### 阶段 3：消息读取与过滤
 ```
-检测到群切换后：
-1. 执行 Swift 脚本：wecom_click_sidebar_candidate.swift
-2. 查找企微侧边栏按钮（通过 Accessibility API）
-3. 模拟点击"网易智企"按钮
-4. 等待 3 秒让页面加载
-```
-
-### 阶段 4：数据捕获（Whistle）
-```
-侧边栏打开后：
-1. 网易智企页面发起 API 请求
-   → GET /chat/api/session/chat/service/record
-2. Whistle 代理拦截请求
-3. 通过 WebSocket 实时推送给 Python
-4. Python 接收消息：
-   - 提取 token（从 URL 参数）
-   - 解析 base64 响应体
-   - 提取会话列表（sessionId, userId, userName）
+检测到会话切换后：
+1. 读取当前会话的消息列表
+2. 过滤无效消息：
+   - 长度 ≤ 5 的消息
+   - 包含界面关键词（未读消息、群聊、标签等）
+3. 有效消息 < 2 条 → 跳过判断
 ```
 
-### 阶段 5：读取聊天内容
+### 阶段 4：超时检查（优先）
 ```
-对每个会话：
-1. 使用 macOS Accessibility API
-2. 读取企微聊天窗口的 UI 元素
-3. 遍历 AXTable → AXRow
-4. 提取消息内容：
-   [{sender: "客服名", content: "消息内容"}]
+检查是否超时：
+1. 记录每个群的最后检查时间和发送者
+2. 如果最后一条是我方消息 + 超过 20 分钟无回复
+   → 直接关闭，跳过 AI 判断
+3. 客户回复后重置计时
 ```
 
-### 阶段 6：智能判断
+### 阶段 5：本地智能判断
 ```
 调用 wecom_judge.py：
 1. 分析最近 4 条消息
 2. 关键词匹配：
    - 客户确认词（好的、OK）→ +3 分
    - 客户感谢词（谢谢）→ +2 分
-   - 我方承诺（稍后答复）→ +2 分
+   - 我方明确承诺（有结论随时同步）→ +4 分
    - 问题已解决（已修复）→ +2 分
    - 检测到新问题（还有个问题）→ -5 分
 3. 计算总分：
    - ≥ 4 分 → strong_end_candidate（关闭）
    - < 0 分 → not_end（保留）
-   - 其他 → uncertain（跳过）
+   - 其他 → uncertain（AI 兜底）
 ```
 
-### 阶段 7：批量关闭
+### 阶段 6：AI 兜底判断（仅 uncertain）
 ```
-筛选出 strong_end_candidate 的会话：
-1. 遍历需要关闭的会话
-2. 调用七鱼 API：
-   POST /chat/api/session/closeWXCSSession
-   Body: sessionId=xxx&groupManageId=6275817
-   Cookie: ___csrfToken=xxx
-3. 统计成功/失败数量
-4. 输出结果
+调用 Brainmaker AI：
+1. 模型：claude-opus-4-5-20251101
+2. 输入：群名 + 最近消息
+3. 输出：ended (true/false) + confidence + reason
+4. confidence ≥ 0.7 → 关闭
+5. 记录今日调用次数
 ```
 
-### 阶段 8：继续监控
+### 阶段 7：刷新数据并提取会话
 ```
-处理完成后：
-1. 清空会话缓存
-2. 继续监控下一次群切换
-3. 循环执行
+判断需要关闭后：
+1. 重新点击"网易智企"标签（刷新数据）
+2. 等待 3 秒让请求产生
+3. 从 Whistle HTTP 拉取最近请求
+4. 优先提取 session/latest 接口的 sessionId
+5. 按时间戳排序，取最新的会话
+6. 提取 code、token、完整 Cookie
+```
+
+### 阶段 8：关闭会话
+```
+调用七鱼 API：
+1. URL: /chat/api/session/closeWXCSSession?code=xxx&token=xxx
+2. Body: sessionId=xxx&groupManageId=6275817
+3. Cookie: 完整的所有 Cookie
+4. 检查响应 JSON 的 code 字段（200 才算成功）
+5. 只关闭 1 个会话（当前会话）
+```
+
+### 阶段 9：持久化与继续监控
+```
+关闭完成后：
+1. 更新会话映射文件（群名 → sessionId）
+2. 重置超时计时
+3. 继续监控下一次会话切换
 ```
 
 ## 🔄 数据流转
 
 ```
-企微群切换
+企微会话切换
     ↓
-AppleScript 检测到新群名
+读取群名和消息（Accessibility API）
     ↓
-Swift 点击侧边栏
+过滤无效消息（界面元素）
     ↓
-触发 API: /chat/api/session/chat/service/record
+检查超时（20分钟无回复？）
+    ├─ 是 → 直接关闭
+    └─ 否 → 继续判断
+        ↓
+本地关键词评分（wecom_judge.py）
+    ├─ ≥4分 → 直接关闭
+    ├─ <0分 → 继续监听
+    └─ uncertain → AI 兜底
+        ↓
+Brainmaker AI 判断
+    ├─ ended=true → 关闭
+    └─ ended=false → 继续监听
+        ↓
+重新点击网易智企（刷新数据）
     ↓
-Whistle 捕获 → WebSocket 推送
+Whistle HTTP 拉取最近请求
     ↓
-Python 解析 → 提取会话列表
+提取 session/latest 接口的 sessionId
     ↓
-Accessibility API → 读取聊天内容
+按时间戳排序，取最新会话
     ↓
-wecom_judge.py → 关键词评分
+提取 code/token/完整Cookie
     ↓
-筛选 strong_end_candidate
+调用关闭 API（只关闭1个）
     ↓
-批量调用关闭 API
+持久化会话映射
     ↓
-返回统计结果
+继续监听下一次切换
 ```
+
+## 🎯 关键优化点
+
+### 1. 减少 AI 调用
+- 超时自动关闭（20分钟）
+- 明确承诺直接关闭（+4分）
+- 过滤无效消息
+
+### 2. 提高准确性
+- 使用 session/latest 接口
+- 按时间戳排序
+- 只关闭当前会话
+
+### 3. 增强健壮性
+- 持久化会话映射
+- 完整的 Cookie 和参数
+- 虚拟环境自动修复
+- Whistle 规则配置
