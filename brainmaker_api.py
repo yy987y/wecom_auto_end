@@ -46,7 +46,8 @@ class BrainmakerAPI:
             json=payload,
             headers=self.headers,
             cookies=self.cookies,
-            stream=stream
+            stream=stream,
+            verify=False
         )
 
         return response
