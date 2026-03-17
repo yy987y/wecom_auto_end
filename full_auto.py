@@ -599,11 +599,21 @@ class WeChatAutoFlow:
                     logger.info(f'💬 检测到消息变化: {group_name}（消息数: {len(messages)}）')
                     last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
-                    # 等待 UI 更新完成（增加到 2 秒）
-                    time.sleep(2)
-                    # 重新读取一次，尝试获取最新消息
-                    _, messages = self.get_current_context()
-                    logger.info(f'📝 重新读取后消息数: {len(messages)}')
+                    
+                    # 多次尝试读取，取消息最多的那次
+                    logger.info('🔄 开始多次尝试读取最新消息...')
+                    attempts = []
+                    for i in range(3):
+                        time.sleep(1)
+                        _, msgs = self.get_current_context()
+                        attempts.append(msgs)
+                        logger.info(f'  尝试 {i+1}/3: 读取到 {len(msgs)} 条消息')
+                    
+                    # 选择消息最多的那次
+                    best_messages = max(attempts, key=len)
+                    logger.info(f'✅ 最终使用: {len(best_messages)} 条消息')
+                    
+                    # 使用最佳结果进行判断
                     self.run_once()
                 # 首次进入该群
                 elif group_name not in last_message_hash:
