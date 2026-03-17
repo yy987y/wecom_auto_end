@@ -417,12 +417,12 @@ class WeChatAutoFlow:
             return
 
         logger.info(f'📍 当前群/会话: {group_name}')
-        logger.debug(f'📝 有效消息数: {len(valid_messages)}')
+        logger.info(f'📝 有效消息数: {len(valid_messages)}')
         if valid_messages:
             for i, msg in enumerate(valid_messages[-3:], 1):
                 sender = msg.get('sender', '')
                 content = msg.get('content', '') or msg.get('body', '')
-                logger.debug(f'📝 消息 {i}: [{sender}] {content[:50]}...')
+                logger.info(f'📝 消息 {i}: [{sender}] {content[:100]}')
         
         # 检查超时：最后一条消息是我方发送，且超过 20 分钟无回复
         if valid_messages:
