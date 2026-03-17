@@ -423,17 +423,23 @@ class WeChatAutoFlow:
             last_msg = valid_messages[-1]
             last_sender = last_msg.get('sender', '')
             
+            logger.info(f'📝 最后一条消息 - 发送者: {last_sender}')
+            
             # 判断是否是我方发送（根据发送者名称判断）
             is_our_message = any(keyword in last_sender for keyword in ['客服', '技术支持', '网易', '智企'])
+            logger.info(f'📝 是否我方消息: {is_our_message}')
             
             # 更新或检查该群的最后检查时间
             current_time = time.time()
             if group_name not in self.group_last_check:
                 # 首次检查，记录时间和发送者
                 self.group_last_check[group_name] = {'time': current_time, 'is_our': is_our_message}
+                logger.info(f'⏰ 首次检查，记录时间: {time.strftime("%H:%M:%S", time.localtime(current_time))}')
             else:
                 last_check = self.group_last_check[group_name]
                 elapsed_minutes = (current_time - last_check['time']) / 60
+                logger.info(f'⏰ 距离上次检查: {elapsed_minutes:.1f} 分钟')
+                logger.info(f'⏰ 上次是否我方: {last_check["is_our"]}, 本次是否我方: {is_our_message}')
                 
                 # 如果最后一条是我方消息，且超过 20 分钟，自动关闭
                 if last_check['is_our'] and is_our_message and elapsed_minutes >= 20:
@@ -448,6 +454,7 @@ class WeChatAutoFlow:
                 
                 # 如果发送者变化（客户回复了），更新记录
                 if last_check['is_our'] != is_our_message:
+                    logger.info(f'⏰ 发送者变化，重置计时')
                     self.group_last_check[group_name] = {'time': current_time, 'is_our': is_our_message}
         
         status, confidence, reason = self.judge_current_chat(group_name, valid_messages)
