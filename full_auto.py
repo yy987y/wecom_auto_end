@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from logger import setup_logger
 from wecom_judge import judge_end_status
 from wecom_monitor import ax_copy, find_wecom_app, get_group_name, get_messages
-from wecom_executor import run_swift
+from wecom_executor import run_swift, open_sidebar_and_qiyu, ensure_login_state, reset_sidebar
 
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 logger = setup_logger('wecom_auto', Path(__file__).parent / 'logs')
@@ -78,23 +78,33 @@ class WeChatAutoFlow:
         logger.debug(f'当前消息数: {len(messages)}')
         return group_name, messages
 
-    def ensure_sidebar_chain(self):
-        """复用老版本验证过的链路：侧边栏 → 网易智企 → 重登录"""
-        steps = [
-            ('wecom_click_sidebar_candidate.swift', '打开侧边栏'),
-            ('wecom_click_netease.swift', '点击网易智企'),
-            ('wecom_click_relogin.swift', '处理重新登录'),
-        ]
-        all_ok = True
-        for script, desc in steps:
-            ok, output = run_swift(script)
-            logger.info(f'[执行器] {desc}: {"✅" if ok else "❌"}')
-            if output:
-                logger.info(f'  {output}')
+    def ensure_sidebar_chain(self, max_retries=2):
+        """确保 UI 进入网易智企就绪态；若卡住则关闭侧边栏重试"""
+        for attempt in range(1, max_retries + 1):
+            logger.info(f'🧪 UI 就绪尝试 #{attempt}')
+            ok, msg = open_sidebar_and_qiyu(wait_seconds=5)
             if not ok:
-                all_ok = False
-            time.sleep(0.8)
-        return all_ok
+                logger.error(f'打开侧边栏/切网易智企失败: {msg}')
+                continue
+
+            login_ok, login_msg = ensure_login_state()
+            if login_ok:
+                logger.info('✅ 登录状态已处理完成或已处于登录成功状态')
+            else:
+                logger.warning('⚠️ 当前未明确判定为已登录，继续结合 Whistle 结果判断')
+
+            logger.info('⏳ 等待 qiyukf 请求产生...')
+            time.sleep(3)
+            sessions = self.extract_qiyu_context_from_whistle()
+            if sessions or self.token or self.session_cookie:
+                logger.info(f'✅ UI 就绪成功：token={bool(self.token)}, cookie={bool(self.session_cookie)}, sessions={len(sessions)}')
+                return True
+
+            logger.warning('本轮未检测到 qiyukf 请求或关键参数，尝试重置侧边栏后重试')
+            reset_sidebar()
+            time.sleep(1)
+
+        return False
 
     def fetch_whistle_data(self, count=100):
         url = f'http://127.0.0.1:{self.whistle_port}/cgi-bin/get-data?count={count}'
