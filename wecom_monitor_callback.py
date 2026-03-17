@@ -40,31 +40,42 @@ class WeChatMonitor:
     def notification_callback(self, observer, element, notification, refcon):
         """Accessibility 通知回调"""
         try:
-            logger.debug(f'收到通知: {notification}')
+            logger.info(f'🔔 收到通知: {notification}')
             
             # 读取当前群名和消息
             app = find_wecom_app()
             if not app:
+                logger.warning('未找到企微应用')
                 return
             
             app_el = AXUIElementCreateApplication(app.processIdentifier())
             focused = AXUIElementCopyAttributeValue(app_el, kAXFocusedWindowAttribute, None)[1]
             if not focused:
+                logger.warning('未找到焦点窗口')
                 return
             
             group_name = get_group_name(focused)
             messages = get_messages(focused)
             
+            logger.info(f'📍 当前群: {group_name}, 消息数: {len(messages)}')
+            
             if not group_name or len(messages) < 2:
+                logger.debug('群名为空或消息太少，跳过')
                 return
             
             # 计算消息哈希，避免重复触发
             msg_hash = hash(str(messages[-1]))
             if msg_hash == self.last_message_hash:
+                logger.debug('消息未变化，跳过')
                 return
             
             self.last_message_hash = msg_hash
             logger.info(f'💬 检测到消息变化: {group_name}')
+            
+            # 打印最后一条消息
+            if messages:
+                last = messages[-1]
+                logger.info(f'📝 最后一条: [{last.get("sender")}] {last.get("content", "")[:80]}')
             
             # 调用回调
             self.on_message_change(group_name, messages)
