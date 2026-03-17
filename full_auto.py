@@ -609,7 +609,15 @@ class WeChatAutoFlow:
                     for i, delay in enumerate(delays):
                         if delay > 0:
                             time.sleep(delay)
-                        _, msgs = self.get_current_context()
+                        
+                        # 临时关闭 debug，避免重复日志
+                        app, focused = self.get_focused_window()
+                        if focused:
+                            group_name_tmp = get_group_name(focused)
+                            msgs = get_messages(focused, debug=False)
+                        else:
+                            msgs = []
+                        
                         attempts.append(msgs)
                         
                         # 打印每次采样的最后一条消息
