@@ -110,14 +110,19 @@ def get_messages(focused):
         if path.startswith('window.0.31.9.0.0.0'): score += 50
         elif path.startswith('window.0.31.9'): score += 35
         if path.startswith('window.0.26'): score -= 50
-        score += min(len(row_els), 30)
+        # 优先选择行数最多的 table（通常包含最新消息）
+        score += len(row_els)
         scored.append((score, row_els))
     scored.sort(key=lambda x: x[0], reverse=True)
     if not scored:
         return []
     
+    # 只取最后 20 条消息（最新的）
+    all_rows = scored[0][1]
+    recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
+    
     parsed = []
-    for row in scored[0][1]:
+    for row in recent_rows:
         tokens = flatten_texts(row, max_depth=6)
         if len(tokens) >= 2:
             parsed.append({'sender': tokens[0] if len(tokens) > 0 else None, 
