@@ -112,7 +112,7 @@ def get_messages(focused, debug=False):
     # 查找路径包含 window.0.31.9 的文本元素（中间聊天区域）
     all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
     
-    # 过滤出聊天区域的文本
+    # 过滤出聊天区域的文本，并获取位置信息
     chat_texts = []
     seen_texts = set()  # 用于去重
     for el, path in all_texts:
@@ -125,7 +125,17 @@ def get_messages(focused, debug=False):
         
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
         if text and text not in seen_texts:  # 去重
-            chat_texts.append((path, text))
+            # 获取位置信息
+            try:
+                from ApplicationServices import AXUIElementCopyAttributeValue, kAXPositionAttribute
+                pos_result = AXUIElementCopyAttributeValue(el, kAXPositionAttribute, None)
+                if pos_result[0] == 0 and pos_result[1]:
+                    x = pos_result[1].pointValue().x
+                    chat_texts.append((path, text, x))
+                else:
+                    chat_texts.append((path, text, 0))
+            except:
+                chat_texts.append((path, text, 0))
             seen_texts.add(text)
     
     # 只取最新的30个
@@ -133,47 +143,66 @@ def get_messages(focused, debug=False):
     
     if debug:
         print(f'\n🔍 DEBUG: 聊天区域找到 {len(chat_texts)} 个文本元素（最后20个）')
-        for i, (path, text) in enumerate(chat_texts[-20:], 1):
-            print(f'  {i}. [{path}] {text[:80]}')
+        for i, (path, text, x) in enumerate(chat_texts[-20:], 1):
+            print(f'  {i}. [x={x:.0f}] [{path}] {text[:80]}')
     
-    # 按路径分组：同一个消息的文本在相同的消息ID下
-    # 路径格式：window.0.31.9.0.0.0.N.x.x，其中N是消息ID
+    # 按路径分组，并根据 x 坐标判断是否是我方消息
     messages = []
     current_group = []
     last_msg_id = None
     
-    for path, text in chat_texts:
+    # 计算 x 坐标的中位数，用于判断左右
+    x_coords = [x for _, _, x in chat_texts if x > 0]
+    if x_coords:
+        median_x = sorted(x_coords)[len(x_coords) // 2]
+    else:
+        median_x = 500  # 默认值
+    
+    for path, text, x in chat_texts:
         # 提取消息ID（第7级，索引6）
         parts = path.split('.')
         if len(parts) >= 7:
-            msg_id = parts[6]  # 消息ID
+            msg_id = parts[6]
         else:
             msg_id = path
         
         # 如果消息ID变化，说明是新的消息
         if last_msg_id and msg_id != last_msg_id:
             if current_group:
-                # 第一个通常是发送者，后面是内容
-                sender = current_group[0] if len(current_group) > 0 else ''
-                content = ' '.join(current_group[1:]) if len(current_group) > 1 else current_group[0]
+                # 判断是否是我方消息（右侧，x 坐标较大）
+                group_x = [x for _, x in current_group if x > 0]
+                is_our_message = any(x > median_x for x in group_x) if group_x else False
+                
+                # 组合消息内容
+                texts = [t for t, _ in current_group]
+                sender = '我方' if is_our_message else texts[0] if texts else ''
+                content = ' '.join(texts[1:]) if len(texts) > 1 and not is_our_message else ' '.join(texts)
+                
                 messages.append({
                     'sender': sender,
                     'content': content,
-                    'body': ' '.join(current_group)
+                    'body': ' '.join(texts),
+                    'is_our': is_our_message
                 })
             current_group = []
         
-        current_group.append(text)
+        current_group.append((text, x))
         last_msg_id = msg_id
     
     # 处理最后一组
     if current_group:
-        sender = current_group[0] if len(current_group) > 0 else ''
-        content = ' '.join(current_group[1:]) if len(current_group) > 1 else current_group[0]
+        group_x = [x for _, x in current_group if x > 0]
+        is_our_message = any(x > median_x for x in group_x) if group_x else False
+        
+        texts = [t for t, _ in current_group]
+        sender = '我方' if is_our_message else texts[0] if texts else ''
+        content = ' '.join(texts[1:]) if len(texts) > 1 and not is_our_message else ' '.join(texts)
+        
         messages.append({
             'sender': sender,
             'content': content,
-            'body': ' '.join(current_group)
+            'body': ' '.join(texts),
+            'is_our': is_our_message
         })
     
     # 只返回最后 20 条
