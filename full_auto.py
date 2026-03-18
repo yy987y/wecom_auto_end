@@ -248,7 +248,6 @@ class WeChatAutoFlow:
             
             # 最新会话接口（最可靠）
             if 'session/latest' in req_url:
-                logger.info('🎯 发现最新会话接口')
                 res = item.get('res', {}) or {}
                 base64_body = res.get('base64')
                 if base64_body:
@@ -260,15 +259,16 @@ class WeChatAutoFlow:
                             session_id = result.get('id')
                             if session_id:
                                 timestamp = item.get('startTime', 0)
-                                logger.info(f'✅ 从 latest 接口获取到当前会话: {session_id}')
-                                # 最新会话接口最可靠，放在最前面
-                                sessions.insert(0, {
-                                    'id': session_id,
-                                    'name': 'latest',
-                                    'timestamp': timestamp,
-                                    'is_current': True,
-                                    'is_latest': True
-                                })
+                                # 去重：避免重复添加同一个 session
+                                if not any(s.get('id') == session_id and s.get('is_latest') for s in sessions):
+                                    logger.info(f'✅ 从 latest 接口获取到当前会话: {session_id}')
+                                    sessions.insert(0, {
+                                        'id': session_id,
+                                        'name': 'latest',
+                                        'timestamp': timestamp,
+                                        'is_current': True,
+                                        'is_latest': True
+                                    })
                     except Exception as e:
                         logger.error(f'解析 latest 接口失败: {e}')
             
