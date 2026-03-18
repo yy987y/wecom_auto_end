@@ -169,6 +169,13 @@ def get_messages(focused, debug=False):
         chat_prefix = max(path_groups.keys(), key=lambda k: len(path_groups[k]))
 
     chat_texts = path_groups[chat_prefix]
+
+    # 在主聊天容器内，仅保留消息主链，排除右侧群公告/名片/资料卡等分支
+    if chat_prefix == 'window.0.31.9':
+        main_thread_prefix = 'window.0.31.9.0.0.0.'
+        filtered_chat_texts = [(path, text) for path, text in chat_texts if path.startswith(main_thread_prefix)]
+        if filtered_chat_texts:
+            chat_texts = filtered_chat_texts
     
     if debug:
         lang = '中文' if is_chinese else '英文'

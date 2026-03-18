@@ -45,7 +45,8 @@ def build_path_groups(focused):
         parts = path.split('.')
         prefix = '.'.join(parts[:4]) if len(parts) >= 4 else path
 
-        if is_chinese and prefix == 'window.0.31.2':
+        # 左侧会话列表，统一排除
+        if prefix == 'window.0.31.2':
             continue
 
         if prefix not in path_groups:
@@ -98,11 +99,17 @@ for prefix, items in sorted(path_groups.items()):
         print(f'  ... 还有 {len(items)-5} 个')
 
 if path_groups:
-    chat_prefix = max(path_groups.keys(), key=lambda k: len(path_groups[k]))
+    chat_prefix = 'window.0.31.9' if 'window.0.31.9' in path_groups else max(path_groups.keys(), key=lambda k: len(path_groups[k]))
     chat_texts = path_groups[chat_prefix]
 
+    if chat_prefix == 'window.0.31.9':
+        main_thread_prefix = 'window.0.31.9.0.0.0.'
+        filtered_chat_texts = [(path, text) for path, text in chat_texts if path.startswith(main_thread_prefix)]
+        if filtered_chat_texts:
+            chat_texts = filtered_chat_texts
+
     print(f'\n\n🎯 主逻辑将选择聊天区域: {chat_prefix}')
-    print(f'📦 该区域原始文本数: {len(chat_texts)}')
+    print(f'📦 过滤后文本数: {len(chat_texts)}')
 
     preview = chat_texts[-30:] if len(chat_texts) > 30 else chat_texts
     print('\n🧾 主逻辑实际使用的原始文本（末尾样本）:')
