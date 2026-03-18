@@ -415,12 +415,12 @@ class WeChatAutoFlow:
         
         # 检查消息是否有效（过滤界面元素）
         invalid_keywords = ['badge', 'number', 'gray', 'button', '未读消息', '群聊', '外部聊天', 
-                           '通讯录', '工作台', '消息', '标签', '菜单', '导航']
+                           '通讯录', '工作台', '标签', '菜单', '导航']
         valid_messages = []
         for msg in messages:
             content = msg.get('content', '') or msg.get('body', '')
-            # 过滤无效内容：界面元素、空消息、纯数字等
-            if not content or len(content) <= 5:
+            # 过滤空消息
+            if not content or len(content.strip()) == 0:
                 continue
             # 检查是否包含界面关键词
             if any(keyword in content for keyword in invalid_keywords):
