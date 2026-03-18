@@ -123,7 +123,7 @@ def get_messages(focused, debug=False):
             continue
         
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
-        if text and len(text) > 2:
+        if text:  # 只要有文本就保留
             chat_texts.append((path, text))
     
     if debug:
