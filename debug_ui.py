@@ -9,13 +9,18 @@ from wecom_monitor import (
     ax_str,
     get_group_name,
     get_messages,
+    get_fresh_focused_window,
+    ax_copy,
 )
 from ApplicationServices import (
     AXUIElementCreateApplication,
     AXUIElementCopyAttributeValue,
     kAXFocusedWindowAttribute,
+    kAXFocusedUIElementAttribute,
+    kAXFocusedApplicationAttribute,
     kAXValueAttribute,
     kAXTitleAttribute,
+    kAXChildrenAttribute,
 )
 
 
@@ -53,16 +58,12 @@ def build_path_groups(focused):
     return all_texts, path_groups, is_chinese
 
 
-app = find_wecom_app()
+app, focused, ctx = get_fresh_focused_window()
 if not app:
     print('❌ 未找到企微')
     exit(1)
 
 print(f'✅ 找到企微: {app.localizedName()}')
-
-# 每次运行都重新创建 app/focused 对象，避免复用旧引用
-app_el = AXUIElementCreateApplication(app.processIdentifier())
-focused = AXUIElementCopyAttributeValue(app_el, kAXFocusedWindowAttribute, None)[1]
 
 if not focused:
     print('❌ 未获取到焦点窗口')
@@ -72,6 +73,13 @@ print('✅ 获取到焦点窗口')
 
 window_title = ax_str(focused, kAXTitleAttribute) or ax_str(focused, kAXValueAttribute) or '(无标题)'
 print(f'🪟 当前窗口标题: {window_title}')
+
+system_focused_ui = ctx.get('system_focused_ui')
+system_focused_app = ctx.get('system_focused_app')
+print(f"🧭 system-wide focused ui role: {role(system_focused_ui) if system_focused_ui else '(none)'}")
+print(f"🧭 system-wide focused app title: {ax_str(system_focused_app, kAXTitleAttribute) or ax_str(system_focused_app, kAXValueAttribute) or '(none)'}")
+print(f"🧭 focused window role: {role(focused)}")
+print(f"🧭 focused window children: {len(ax_copy(focused, kAXChildrenAttribute) or [])}")
 
 current_group = get_group_name(focused)
 print(f'👥 主逻辑识别群名: {current_group}')

@@ -12,8 +12,10 @@ from AppKit import NSWorkspace
 from ApplicationServices import (
     AXUIElementCreateApplication, AXUIElementCopyAttributeValue,
     AXIsProcessTrustedWithOptions, kAXFocusedWindowAttribute,
+    kAXFocusedUIElementAttribute, kAXFocusedApplicationAttribute,
     kAXChildrenAttribute, kAXRoleAttribute, kAXValueAttribute,
-    kAXTitleAttribute, kAXDescriptionAttribute
+    kAXTitleAttribute, kAXDescriptionAttribute,
+    AXUIElementCreateSystemWide,
 )
 
 # 导入本地模块
@@ -57,6 +59,26 @@ def find_wecom_app():
         if any(n.lower() in name.lower() for n in ['企业微信', 'WeCom', 'WXWork']):
             return app
     return None
+
+
+def get_fresh_focused_window():
+    """每次重新获取当前聚焦的企微窗口，避免复用旧 AX 引用。"""
+    app = find_wecom_app()
+    if not app:
+        return None, None, None
+
+    app_el = AXUIElementCreateApplication(app.processIdentifier())
+    focused = ax_copy(app_el, kAXFocusedWindowAttribute)
+
+    system_wide = AXUIElementCreateSystemWide()
+    focused_ui = ax_copy(system_wide, kAXFocusedUIElementAttribute)
+    focused_app = ax_copy(system_wide, kAXFocusedApplicationAttribute)
+
+    return app, focused, {
+        'app_el': app_el,
+        'system_focused_ui': focused_ui,
+        'system_focused_app': focused_app,
+    }
 
 def walk_collect(el, predicate, depth=0, max_depth=9, out=None, path='window'):
     if out is None:
@@ -127,8 +149,8 @@ def get_messages(focused, debug=False):
         parts = path.split('.')
         prefix = '.'.join(parts[:4]) if len(parts) >= 4 else path
         
-        # 中文版：排除会话列表区域（window.0.31.2）
-        if is_chinese and prefix == 'window.0.31.2':
+        # window.0.31.2 已确认是左侧会话列表，统一排除
+        if prefix == 'window.0.31.2':
             continue
         
         if prefix not in path_groups:
@@ -137,10 +159,15 @@ def get_messages(focused, debug=False):
         if text:
             path_groups[prefix].append((path, text))
     
-    # 找文本最多的区域（聊天区域）
     if not path_groups:
         return []
-    chat_prefix = max(path_groups.keys(), key=lambda k: len(path_groups[k]))
+
+    # 优先使用已验证的聊天区 window.0.31.9
+    if 'window.0.31.9' in path_groups and path_groups['window.0.31.9']:
+        chat_prefix = 'window.0.31.9'
+    else:
+        chat_prefix = max(path_groups.keys(), key=lambda k: len(path_groups[k]))
+
     chat_texts = path_groups[chat_prefix]
     
     if debug:
