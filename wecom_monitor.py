@@ -137,21 +137,21 @@ def get_messages(focused, debug=False):
             print(f'  {i}. [{path}] {text[:80]}')
     
     # 按路径分组：同一个消息气泡的文本在相同的父路径下
-    # 例如：window.0.31.9.0.0.0.10.0.0 和 window.0.31.9.0.0.0.10.0.1 属于同一条消息
+    # 例如：window.0.31.9.0.0.0.10.x.x 属于同一条消息
     messages = []
     current_group = []
-    last_parent_path = None
+    last_msg_path = None
     
     for path, text in chat_texts:
-        # 提取父路径（去掉最后一级）
+        # 提取消息级别的路径（window.0.31.9.0.0.0.N）
         parts = path.split('.')
-        if len(parts) > 1:
-            parent_path = '.'.join(parts[:-1])
+        if len(parts) >= 8:
+            msg_path = '.'.join(parts[:8])  # 取前8级作为消息标识
         else:
-            parent_path = path
+            msg_path = path
         
-        # 如果父路径变化，说明是新的消息
-        if last_parent_path and parent_path != last_parent_path:
+        # 如果消息路径变化，说明是新的消息
+        if last_msg_path and msg_path != last_msg_path:
             if current_group:
                 # 第一个通常是发送者，后面是内容
                 sender = current_group[0] if len(current_group) > 0 else ''
@@ -164,7 +164,7 @@ def get_messages(focused, debug=False):
             current_group = []
         
         current_group.append(text)
-        last_parent_path = parent_path
+        last_msg_path = msg_path
     
     # 处理最后一组
     if current_group:
