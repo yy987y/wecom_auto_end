@@ -105,18 +105,26 @@ def get_group_name(focused):
     return scored[0][1] if scored else None
 
 def get_messages(focused, debug=False):
-    # 新策略：查找 AXScrollArea，然后找所有文本元素，按 y 坐标排序
+    # 新策略：只从中间聊天区域提取消息，不读取侧边栏
     scroll_areas = walk_collect(focused, lambda el: role(el) == 'AXScrollArea', max_depth=10)
     
     if debug:
         print(f'\n🔍 DEBUG: 找到 {len(scroll_areas)} 个 AXScrollArea')
     
-    # 找到最可能是聊天区域的 ScrollArea（通常是最大的）
+    # 找到中间聊天区域的 ScrollArea（跳过侧边栏）
     best_scroll = None
     for scroll, path in scroll_areas:
-        # 跳过侧边栏等小区域
-        if 'window.0.26' in path:  # 侧边栏
+        # 跳过侧边栏（window.0.26 是左侧，window.0.31.5 是右侧侧边栏）
+        if 'window.0.26' in path or 'window.0.31.5' in path:
+            if debug:
+                print(f'  跳过侧边栏: {path}')
             continue
+        # 优先选择中间聊天区域（通常是 window.0.31.0 或类似路径）
+        if 'window.0.31.0' in path or 'window.0.31.1' in path:
+            best_scroll = scroll
+            if debug:
+                print(f'  ✅ 选中聊天区域: {path}')
+            break
         if best_scroll is None:
             best_scroll = scroll
     
