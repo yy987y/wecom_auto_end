@@ -114,6 +114,7 @@ def get_messages(focused, debug=False):
     
     # 过滤出聊天区域的文本
     chat_texts = []
+    seen_texts = set()  # 用于去重
     for el, path in all_texts:
         # 只要聊天区域的（window.0.31.9）
         if 'window.0.31.9' not in path:
@@ -123,8 +124,9 @@ def get_messages(focused, debug=False):
             continue
         
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
-        if text:  # 只要有文本就保留
+        if text and text not in seen_texts:  # 去重
             chat_texts.append((path, text))
+            seen_texts.add(text)
     
     # 只取最新的30个
     chat_texts = chat_texts[-30:] if len(chat_texts) > 30 else chat_texts
