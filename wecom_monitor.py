@@ -104,83 +104,59 @@ def get_group_name(focused):
     scored.sort(reverse=True)
     return scored[0][1] if scored else None
 
-def debug_all_texts(focused):
-    """调试：打印所有文本元素"""
-    all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
-    print(f'\n🔍 DEBUG: 找到 {len(all_texts)} 个文本元素')
-    for i, (el, path) in enumerate(all_texts[-30:], 1):  # 只打印最后30个
-        text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
-        if text and len(text) > 2:
-            print(f'  {i}. [{path}] {text[:100]}')
-
 def get_messages(focused, debug=False):
     # 先滚动到底部，确保最新消息可见
     scroll_to_bottom()
     
-    # 调试模式：打印所有文本元素
-    if debug:
-        debug_all_texts(focused)
+    # 新策略：直接从聊天区域提取所有文本，不依赖 AXTable/AXRow
+    # 查找路径包含 window.0.31.9 的文本元素（中间聊天区域）
+    all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField'], max_depth=12)
     
-    tables = walk_collect(focused, lambda el: role(el) == 'AXTable', max_depth=10)
-    scored = []
-    for table, path in tables:
-        rows = walk_collect(table, lambda el: role(el) == 'AXRow', max_depth=3)
-        row_els = [r for r, _ in rows]
-        if len(row_els) < 3:
+    # 过滤出聊天区域的文本
+    chat_texts = []
+    for el, path in all_texts:
+        # 只要聊天区域的（window.0.31.9）
+        if 'window.0.31.9' not in path:
             continue
-        score = 0
-        if path.startswith('window.0.31.9.0.0.0'): score += 50
-        elif path.startswith('window.0.31.9'): score += 35
-        if path.startswith('window.0.26'): score -= 50
-        # 优先选择行数最多的 table（通常包含最新消息）
-        score += len(row_els)
-        scored.append((score, row_els))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    if not scored:
-        return []
+        # 跳过侧边栏（window.0.26）
+        if 'window.0.26' in path:
+            continue
+        
+        text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
+        if text and len(text) > 2:
+            chat_texts.append((path, text))
     
-    all_rows = scored[0][1]
-    
-    # Debug 模式：对比两种方案
     if debug:
-        print(f'\n🔍 DEBUG: 找到 {len(scored)} 个 table，选择评分最高的（{len(all_rows)} 行）')
-        
-        # 方案1：所有消息
-        print('\n📋 方案1：所有消息')
-        parsed_all = []
-        for i, row in enumerate(all_rows):
-            tokens = flatten_texts(row, max_depth=6)
-            if len(tokens) >= 2:
-                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
-                parsed_all.append(msg)
-                if i >= len(all_rows) - 5:  # 只打印最后5条
-                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
-        
-        # 方案2：最后20条
-        print('\n📋 方案2：最后20条')
-        recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
-        parsed_recent = []
-        for i, row in enumerate(recent_rows):
-            tokens = flatten_texts(row, max_depth=6)
-            if len(tokens) >= 2:
-                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
-                parsed_recent.append(msg)
-                if i >= len(recent_rows) - 5:  # 只打印最后5条
-                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
-        
-        print(f'\n✅ 方案1总数: {len(parsed_all)}, 方案2总数: {len(parsed_recent)}\n')
+        print(f'\n🔍 DEBUG: 聊天区域找到 {len(chat_texts)} 个文本元素（最后20个）')
+        for i, (path, text) in enumerate(chat_texts[-20:], 1):
+            print(f'  {i}. [{path}] {text[:80]}')
     
-    # 只取最后 20 条消息（最新的）
-    recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
+    # 简单解析：相邻的文本组合成消息
+    # 假设：发送者 + 时间/内容
+    messages = []
+    i = 0
+    while i < len(chat_texts):
+        path1, text1 = chat_texts[i]
+        
+        # 如果下一个文本存在，尝试组合
+        if i + 1 < len(chat_texts):
+            path2, text2 = chat_texts[i + 1]
+            messages.append({
+                'sender': text1,
+                'content': text2,
+                'body': f'{text1} {text2}'
+            })
+            i += 2
+        else:
+            messages.append({
+                'sender': '',
+                'content': text1,
+                'body': text1
+            })
+            i += 1
     
-    parsed = []
-    for row in recent_rows:
-        tokens = flatten_texts(row, max_depth=6)
-        if len(tokens) >= 2:
-            parsed.append({'sender': tokens[0] if len(tokens) > 0 else None, 
-                          'content': ' '.join(tokens[1:]) if len(tokens) > 1 else None,
-                          'body': ' '.join(tokens)})
-    return parsed
+    # 只返回最后 20 条
+    return messages[-20:] if len(messages) > 20 else messages
 
 def main():
     if not AXIsProcessTrustedWithOptions({'AXTrustedCheckOptionPrompt': True}):
