@@ -586,6 +586,15 @@ class WeChatAutoFlow:
                     self.current_group = group_name
                     last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
+                    # 主动刷新侧边栏，强制加载最新消息
+                    logger.info('🔄 刷新侧边栏以加载最新消息...')
+                    refresh_ok, _ = run_swift('wecom_click_netease.swift')
+                    if refresh_ok:
+                        logger.info('✅ 已刷新侧边栏')
+                        time.sleep(2)  # 等待消息加载
+                    else:
+                        logger.warning('⚠️ 刷新失败，使用默认等待')
+                        time.sleep(2)
                     self.run_once()
                 # 最后一条消息内容变化（有新消息）
                 elif current_hash and group_name in last_message_hash and current_hash != last_message_hash[group_name]:
