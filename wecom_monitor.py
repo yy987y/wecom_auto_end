@@ -128,69 +128,45 @@ def get_messages(focused, debug=False):
     
     all_rows = scored[0][1]
     
-    # 新策略：按消息气泡分组
-    def extract_message_bubbles(row):
-        """从一个 row 中提取所有消息气泡"""
-        bubbles = []
-        groups = walk_collect(row, lambda el: role(el) == 'AXGroup', max_depth=5)
-        
-        for group, _ in groups:
-            texts = flatten_texts(group, max_depth=3)
-            if len(texts) >= 2:
-                # 第一个通常是发送者，后面是内容
-                bubbles.append({
-                    'sender': texts[0],
-                    'content': ' '.join(texts[1:]),
-                    'body': ' '.join(texts)
-                })
-        
-        # 如果没找到 AXGroup，回退到原逻辑
-        if not bubbles:
-            texts = flatten_texts(row, max_depth=6)
-            if len(texts) >= 2:
-                bubbles.append({
-                    'sender': texts[0],
-                    'content': ' '.join(texts[1:]),
-                    'body': ' '.join(texts)
-                })
-        
-        return bubbles
-    
     # Debug 模式：对比两种方案
     if debug:
         print(f'\n🔍 DEBUG: 找到 {len(scored)} 个 table，选择评分最高的（{len(all_rows)} 行）')
         
         # 方案1：所有消息
-        print('\n📋 方案1：所有消息（按气泡分组）')
+        print('\n📋 方案1：所有消息')
         parsed_all = []
         for i, row in enumerate(all_rows):
-            bubbles = extract_message_bubbles(row)
-            parsed_all.extend(bubbles)
-            if i >= len(all_rows) - 5:  # 只打印最后5行
-                for bubble in bubbles:
-                    print(f'  {len(parsed_all)}. [{bubble["sender"]}] {bubble["content"][:80]}')
+            tokens = flatten_texts(row, max_depth=6)
+            if len(tokens) >= 2:
+                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
+                parsed_all.append(msg)
+                if i >= len(all_rows) - 5:  # 只打印最后5条
+                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
         
         # 方案2：最后20条
-        print('\n📋 方案2：最后20行（按气泡分组）')
+        print('\n📋 方案2：最后20条')
         recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
         parsed_recent = []
         for i, row in enumerate(recent_rows):
-            bubbles = extract_message_bubbles(row)
-            parsed_recent.extend(bubbles)
-            if i >= len(recent_rows) - 5:  # 只打印最后5行
-                for bubble in bubbles:
-                    print(f'  {len(parsed_recent)}. [{bubble["sender"]}] {bubble["content"][:80]}')
+            tokens = flatten_texts(row, max_depth=6)
+            if len(tokens) >= 2:
+                msg = {'sender': tokens[0], 'content': ' '.join(tokens[1:]), 'body': ' '.join(tokens)}
+                parsed_recent.append(msg)
+                if i >= len(recent_rows) - 5:  # 只打印最后5条
+                    print(f'  {i+1}. [{msg["sender"]}] {msg["content"][:80]}')
         
         print(f'\n✅ 方案1总数: {len(parsed_all)}, 方案2总数: {len(parsed_recent)}\n')
     
-    # 只取最后 20 行消息（最新的）
+    # 只取最后 20 条消息（最新的）
     recent_rows = all_rows[-20:] if len(all_rows) > 20 else all_rows
     
     parsed = []
     for row in recent_rows:
-        bubbles = extract_message_bubbles(row)
-        parsed.extend(bubbles)
-    
+        tokens = flatten_texts(row, max_depth=6)
+        if len(tokens) >= 2:
+            parsed.append({'sender': tokens[0] if len(tokens) > 0 else None, 
+                          'content': ' '.join(tokens[1:]) if len(tokens) > 1 else None,
+                          'body': ' '.join(tokens)})
     return parsed
 
 def main():
