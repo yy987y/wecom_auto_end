@@ -108,8 +108,16 @@ def get_messages(focused, debug=False):
     # 先滚动到底部，确保最新消息可见
     scroll_to_bottom()
     
-    # 新策略：自动识别聊天区域（文本最多的区域）
+    # 新策略：自动识别聊天区域
     all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
+    
+    # 检测语言版本（通过查找特征文本）
+    is_chinese = False
+    for el, path in all_texts[:50]:  # 只检查前50个
+        text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
+        if '群聊' in text or '单聊' in text or '外部' in text:
+            is_chinese = True
+            break
     
     # 按路径前4级分组
     path_groups = {}
@@ -119,8 +127,8 @@ def get_messages(focused, debug=False):
         parts = path.split('.')
         prefix = '.'.join(parts[:4]) if len(parts) >= 4 else path
         
-        # 排除会话列表区域（window.0.31.2）
-        if prefix == 'window.0.31.2':
+        # 中文版：排除会话列表区域（window.0.31.2）
+        if is_chinese and prefix == 'window.0.31.2':
             continue
         
         if prefix not in path_groups:
@@ -136,6 +144,8 @@ def get_messages(focused, debug=False):
     chat_texts = path_groups[chat_prefix]
     
     if debug:
+        lang = '中文' if is_chinese else '英文'
+        print(f'🔍 DEBUG: 检测到{lang}版本')
         print(f'🔍 DEBUG: 聊天区域 {chat_prefix}，{len(chat_texts)} 个文本')
     
     # 只取最新的30个
