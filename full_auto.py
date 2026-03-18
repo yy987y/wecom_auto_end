@@ -124,9 +124,7 @@ class WeChatAutoFlow:
         if not focused:
             return None, []
         group_name = get_group_name(focused)
-        messages = get_messages(focused, debug=self.debug)
-        logger.debug(f'当前群名: {group_name}')
-        logger.debug(f'当前消息数: {len(messages)}')
+        messages = get_messages(focused, debug=False)  # 关闭 debug，减少日志
         return group_name, messages
 
     def ensure_sidebar_chain(self, max_retries=2):
@@ -657,7 +655,9 @@ class WeChatAutoFlow:
                     last_message_hash[group_name] = current_hash
                     last_check_time[group_name] = current_time
                 
-                time.sleep(2)
+                # 无变化，等待后继续
+                time.sleep(1)
+                
             except KeyboardInterrupt:
                 logger.info('👋 已退出')
                 break
