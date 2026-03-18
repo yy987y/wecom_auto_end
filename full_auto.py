@@ -551,7 +551,7 @@ class WeChatAutoFlow:
             logger.error('❌ 需要 Accessibility 权限')
             return
 
-        logger.info('🎯 企微自动结束会话 v1.2 启动')
+        logger.info('🎯 企微自动结束会话 v1.5 启动')
         self.start_whistle()
 
         # 先强制把 UI 调整到“网易智企就绪态”
@@ -667,4 +667,12 @@ class WeChatAutoFlow:
 
 
 if __name__ == '__main__':
-    WeChatAutoFlow().run()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action='store_true', help='启用调试模式')
+    args = parser.parse_args()
+    
+    flow = WeChatAutoFlow()
+    if args.debug:
+        flow.debug = True
+    flow.run()
