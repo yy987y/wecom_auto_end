@@ -124,7 +124,7 @@ class WeChatAutoFlow:
         if not focused:
             return None, []
         group_name = get_group_name(focused)
-        messages = get_messages(focused, debug=False)  # 关闭 debug，减少日志
+        messages = get_messages(focused, debug=self.debug)  # 使用 self.debug
         return group_name, messages
 
     def ensure_sidebar_chain(self, max_retries=2):

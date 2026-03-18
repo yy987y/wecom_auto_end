@@ -104,9 +104,22 @@ def get_group_name(focused):
     scored.sort(reverse=True)
     return scored[0][1] if scored else None
 
+def debug_all_texts(focused):
+    """调试：打印所有文本元素"""
+    all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
+    print(f'\n🔍 DEBUG: 找到 {len(all_texts)} 个文本元素')
+    for i, (el, path) in enumerate(all_texts[-30:], 1):  # 只打印最后30个
+        text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
+        if text and len(text) > 2:
+            print(f'  {i}. [{path}] {text[:100]}')
+
 def get_messages(focused, debug=False):
     # 先滚动到底部，确保最新消息可见
     scroll_to_bottom()
+    
+    # 调试模式：打印所有文本元素
+    if debug:
+        debug_all_texts(focused)
     
     tables = walk_collect(focused, lambda el: role(el) == 'AXTable', max_depth=10)
     scored = []
