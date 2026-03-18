@@ -77,20 +77,24 @@ guard let parent = parentOf(qm) else { print("❌ 未找到 Quick Meeting parent
 let siblings = axChildren(parent)
 
 // 选 Quick Meeting 右侧最近的无标题按钮
+let qmIndex = siblings.firstIndex(where: { $0 == qm }) ?? -1
 let candidate = siblings
     .enumerated()
     .compactMap { (idx, e) -> (Int, AXUIElement)? in
         guard role(e) == "AXButton" else { return nil }
         let t = title(e)
-        if !t.isEmpty && t != "Quick Meeting" { return nil }
+        // 跳过有标题的按钮（除了 Quick Meeting）
+        if !t.isEmpty && t != "Quick Meeting" && !t.contains("快速会议") { return nil }
+        // 只要 Quick Meeting 右侧的按钮
+        if idx <= qmIndex { return nil }
         return (idx, e)
     }
-    .first(where: { $0.0 == 13 })
+    .first  // 取第一个（最近的）
 
-if let (_, btn) = candidate {
+if let (idx, btn) = candidate {
     let err = AXUIElementPerformAction(btn, kAXPressAction as CFString)
-    print(err == .success ? "✅ 已点击候选侧边栏按钮(sib13)" : "❌ 点击失败: \(err.rawValue)")
+    print(err == .success ? "✅ 已点击候选侧边栏按钮(sib\(idx))" : "❌ 点击失败: \(err.rawValue)")
 } else {
-    print("❌ 未找到 sib13 候选按钮")
+    print("❌ 未找到候选按钮")
     exit(4)
 }
