@@ -26,6 +26,7 @@ from wecom_executor import execute_end_session
 WS = Path(__file__).parent
 LOG_DIR = WS / 'logs'
 LOG_DIR.mkdir(exist_ok=True)
+UI_MAPPING_FILE = WS / 'data' / 'ui_mapping.json'
 
 def ax_copy(element, attr):
     err, value = AXUIElementCopyAttributeValue(element, attr, None)
@@ -110,6 +111,15 @@ def flatten_texts(el, depth=0, max_depth=7, out=None):
         flatten_texts(child, depth + 1, max_depth, out)
     return out
 
+def load_ui_mapping():
+    if not UI_MAPPING_FILE.exists():
+        return {}
+    try:
+        return json.loads(UI_MAPPING_FILE.read_text(encoding='utf-8'))
+    except Exception:
+        return {}
+
+
 def get_group_name(focused):
     fields = walk_collect(focused, lambda el: role(el) in ('AXTextField', 'AXStaticText'), max_depth=8)
     scored = []
@@ -130,6 +140,10 @@ def get_messages(focused, debug=False):
     # 先滚动到底部，确保最新消息可见
     scroll_to_bottom()
     
+    ui_mapping = load_ui_mapping()
+    mapped_chat_prefix = ui_mapping.get('chat_prefix')
+    mapped_session_list_prefix = ui_mapping.get('session_list_prefix')
+    
     # 新策略：自动识别聊天区域
     all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
     
@@ -149,7 +163,9 @@ def get_messages(focused, debug=False):
         parts = path.split('.')
         prefix = '.'.join(parts[:4]) if len(parts) >= 4 else path
         
-        # window.0.31.2 已确认是左侧会话列表，统一排除
+        # 用户手动校准的会话列表优先排除；否则回退到当前经验规则
+        if mapped_session_list_prefix and prefix == mapped_session_list_prefix:
+            continue
         if prefix == 'window.0.31.2':
             continue
         
@@ -162,8 +178,10 @@ def get_messages(focused, debug=False):
     if not path_groups:
         return []
 
-    # 优先使用已验证的聊天区 window.0.31.9
-    if 'window.0.31.9' in path_groups and path_groups['window.0.31.9']:
+    # 优先使用用户手动校准的聊天区；否则回退到当前经验规则
+    if mapped_chat_prefix and mapped_chat_prefix in path_groups and path_groups[mapped_chat_prefix]:
+        chat_prefix = mapped_chat_prefix
+    elif 'window.0.31.9' in path_groups and path_groups['window.0.31.9']:
         chat_prefix = 'window.0.31.9'
     else:
         chat_prefix = max(path_groups.keys(), key=lambda k: len(path_groups[k]))

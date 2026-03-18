@@ -1,6 +1,13 @@
 #!/bin/bash
 set -e
 
+CALIBRATE_ONLY=false
+for arg in "$@"; do
+    if [ "$arg" = "--calibrate" ]; then
+        CALIBRATE_ONLY=true
+    fi
+done
+
 echo "🎯 企微自动结束会话 - 一键启动"
 echo "================================"
 echo ""
@@ -153,6 +160,19 @@ if ! security find-certificate -c "Whistle" &>/dev/null; then
     }
 else
     echo "✅ 证书已安装"
+fi
+
+# UI 校准
+if [ "$CALIBRATE_ONLY" = true ] || [ ! -f "data/ui_mapping.json" ]; then
+    echo ""
+    echo "🧭 启动前 UI 校准..."
+    echo "请先把企业微信切到目标会话窗口，再根据输出选择聊天区/会话列表"
+    echo ""
+    "$VENV_PY" ui_calibrator.py
+    if [ "$CALIBRATE_ONLY" = true ]; then
+        echo "✅ 校准完成"
+        exit 0
+    fi
 fi
 
 # 启动主程序
