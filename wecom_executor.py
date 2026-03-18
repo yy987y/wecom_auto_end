@@ -34,10 +34,14 @@ def open_sidebar_and_qiyu(wait_seconds=5):
 
 
 def ensure_login_state():
+    print("[执行器] 开始检查登录状态...")
     success, output = run_swift('wecom_click_relogin.swift')
     print(f"[执行器] 检查并处理登录状态: {'✅' if success else '⚠️'}")
+    print(f"[执行器] Swift 脚本返回: success={success}")
     if output:
-        print(f"  {output}")
+        print(f"[执行器] 输出内容: {output}")
+    else:
+        print("[执行器] 无输出内容")
     return success, output
 
 
