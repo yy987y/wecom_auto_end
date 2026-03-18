@@ -435,7 +435,7 @@ class WeChatAutoFlow:
         logger.info(f'📝 有效消息数: {len(valid_messages)}')
         if valid_messages:
             logger.info('📝 最近消息内容：')
-            for i, msg in enumerate(valid_messages[-5:], 1):
+            for i, msg in enumerate(valid_messages[-10:], 1):
                 sender = msg.get('sender', '')
                 content = msg.get('content', '') or msg.get('body', '')
                 logger.info(f'  {i}. [{sender}] {content}')
