@@ -108,25 +108,30 @@ def get_messages(focused, debug=False):
     # 先滚动到底部，确保最新消息可见
     scroll_to_bottom()
     
-    # 新策略：直接从聊天区域提取所有文本，不依赖 AXTable/AXRow
-    # 查找路径包含 window.0.31.9 的文本元素（中间聊天区域）
+    # 新策略：自动识别聊天区域（文本最多的区域）
     all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
     
-    # 过滤出聊天区域的文本
-    chat_texts = []
-    seen_texts = set()  # 用于去重
+    # 按路径前4级分组
+    path_groups = {}
     for el, path in all_texts:
-        # 只要聊天区域的（window.0.31.9）
-        if 'window.0.31.9' not in path:
+        if 'window.0.26' in path:  # 排除侧边栏
             continue
-        # 跳过侧边栏（window.0.26 或 window.0.31.9.9）
-        if 'window.0.26' in path or 'window.0.31.9.9' in path:
-            continue
-        
+        parts = path.split('.')
+        prefix = '.'.join(parts[:4]) if len(parts) >= 4 else path
+        if prefix not in path_groups:
+            path_groups[prefix] = []
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
-        if text and text not in seen_texts:  # 去重
-            chat_texts.append((path, text))
-            seen_texts.add(text)
+        if text:
+            path_groups[prefix].append((path, text))
+    
+    # 找文本最多的区域（聊天区域）
+    if not path_groups:
+        return []
+    chat_prefix = max(path_groups.keys(), key=lambda k: len(path_groups[k]))
+    chat_texts = path_groups[chat_prefix]
+    
+    if debug:
+        print(f'🔍 DEBUG: 聊天区域 {chat_prefix}，{len(chat_texts)} 个文本')
     
     # 只取最新的30个
     chat_texts = chat_texts[-30:] if len(chat_texts) > 30 else chat_texts
