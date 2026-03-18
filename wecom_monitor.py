@@ -110,7 +110,7 @@ def get_messages(focused, debug=False):
     
     # 新策略：直接从聊天区域提取所有文本，不依赖 AXTable/AXRow
     # 查找路径包含 window.0.31.9 的文本元素（中间聊天区域）
-    all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField'], max_depth=12)
+    all_texts = walk_collect(focused, lambda el: role(el) in ['AXStaticText', 'AXTextField', 'AXTextArea'], max_depth=12)
     
     # 过滤出聊天区域的文本
     chat_texts = []
