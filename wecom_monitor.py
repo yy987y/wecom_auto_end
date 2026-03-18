@@ -136,29 +136,45 @@ def get_messages(focused, debug=False):
         for i, (path, text) in enumerate(chat_texts[-20:], 1):
             print(f'  {i}. [{path}] {text[:80]}')
     
-    # 简单解析：相邻的文本组合成消息
-    # 假设：发送者 + 时间/内容
+    # 按路径分组：同一个消息气泡的文本在相同的父路径下
+    # 例如：window.0.31.9.0.0.0.10.0.0 和 window.0.31.9.0.0.0.10.0.1 属于同一条消息
     messages = []
-    i = 0
-    while i < len(chat_texts):
-        path1, text1 = chat_texts[i]
-        
-        # 如果下一个文本存在，尝试组合
-        if i + 1 < len(chat_texts):
-            path2, text2 = chat_texts[i + 1]
-            messages.append({
-                'sender': text1,
-                'content': text2,
-                'body': f'{text1} {text2}'
-            })
-            i += 2
+    current_group = []
+    last_parent_path = None
+    
+    for path, text in chat_texts:
+        # 提取父路径（去掉最后一级）
+        parts = path.split('.')
+        if len(parts) > 1:
+            parent_path = '.'.join(parts[:-1])
         else:
-            messages.append({
-                'sender': '',
-                'content': text1,
-                'body': text1
-            })
-            i += 1
+            parent_path = path
+        
+        # 如果父路径变化，说明是新的消息
+        if last_parent_path and parent_path != last_parent_path:
+            if current_group:
+                # 第一个通常是发送者，后面是内容
+                sender = current_group[0] if len(current_group) > 0 else ''
+                content = ' '.join(current_group[1:]) if len(current_group) > 1 else current_group[0]
+                messages.append({
+                    'sender': sender,
+                    'content': content,
+                    'body': ' '.join(current_group)
+                })
+            current_group = []
+        
+        current_group.append(text)
+        last_parent_path = parent_path
+    
+    # 处理最后一组
+    if current_group:
+        sender = current_group[0] if len(current_group) > 0 else ''
+        content = ' '.join(current_group[1:]) if len(current_group) > 1 else current_group[0]
+        messages.append({
+            'sender': sender,
+            'content': content,
+            'body': ' '.join(current_group)
+        })
     
     # 只返回最后 20 条
     return messages[-20:] if len(messages) > 20 else messages
