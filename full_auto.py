@@ -519,6 +519,13 @@ class WeChatAutoFlow:
                 logger.error(f'未找到群 "{group_name}" 的 sessionId 映射')
                 return
 
+        # 再次调用 latest 接口确认最新的 sessionId
+        logger.info('🔄 再次确认最新会话 ID...')
+        time.sleep(1)
+        sessions = self.extract_qiyu_context_from_whistle()
+        if not sessions:
+            logger.warning('⚠️ 二次提取失败，使用之前的结果')
+        
         # 只关闭当前会话（优先使用 latest 接口的）
         target_session = None
         for session in sessions:
