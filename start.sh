@@ -116,6 +116,28 @@ w2 start 2>/dev/null || echo "⚠️  Whistle 可能已在运行"
 sleep 2
 echo "✅ Whistle 已启动"
 
+# 检查 Brainmaker 配置（可选）
+echo ""
+echo "🔐 检查 Brainmaker 配置..."
+if [ ! -f "credentials.local.yaml" ]; then
+    echo "⚠️  未找到 credentials.local.yaml"
+    echo ""
+    echo "💡 如需 AI 兜底判断，请创建 credentials.local.yaml："
+    echo "   username: your_email@example.com"
+    echo "   password: your_password"
+    echo ""
+    echo "或使用 --debug 模式跳过 AI 判断"
+    echo ""
+    read -p "是否继续？(y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+else
+    echo "✅ Brainmaker 配置已存在"
+fi
+echo ""
+
 # 检查证书
 echo "🔐 检查 Whistle 证书..."
 if ! security find-certificate -c "Whistle" &>/dev/null; then
