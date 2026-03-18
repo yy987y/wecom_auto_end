@@ -5,6 +5,49 @@ echo "🎯 企微自动结束会话 - 一键启动"
 echo "================================"
 echo ""
 
+# 检查 Swift 编译环境
+echo "🔍 检查 Swift 编译环境..."
+if ! swiftc --version &>/dev/null; then
+    echo "❌ Swift 编译器未安装"
+    echo "正在安装 Command Line Tools..."
+    xcode-select --install
+    echo "请在弹出窗口中完成安装，然后重新运行此脚本"
+    exit 1
+fi
+
+# 测试 Swift 编译
+TEST_SWIFT="/tmp/test_swift_$$.swift"
+cat > "$TEST_SWIFT" << 'SWIFT_EOF'
+import Cocoa
+print("OK")
+SWIFT_EOF
+
+if ! swiftc "$TEST_SWIFT" -o /tmp/test_swift_$$ 2>/dev/null; then
+    echo "⚠️  检测到 Swift 编译环境问题"
+    echo "正在修复..."
+    
+    # 清理缓存
+    rm -rf ~/Library/Developer/Xcode/DerivedData/* 2>/dev/null || true
+    rm -rf ~/Library/Caches/com.apple.dt.Xcode/* 2>/dev/null || true
+    
+    # 重置 Xcode 路径
+    sudo xcode-select --reset 2>/dev/null || true
+    
+    # 再次测试
+    if ! swiftc "$TEST_SWIFT" -o /tmp/test_swift_$$ 2>/dev/null; then
+        echo "❌ Swift 编译环境修复失败"
+        echo "请手动执行："
+        echo "  sudo rm -rf /Library/Developer/CommandLineTools"
+        echo "  xcode-select --install"
+        rm -f "$TEST_SWIFT" /tmp/test_swift_$$
+        exit 1
+    fi
+    echo "✅ Swift 编译环境已修复"
+fi
+rm -f "$TEST_SWIFT" /tmp/test_swift_$$
+echo "✅ Swift 编译环境正常"
+echo ""
+
 # 检查 Python 3
 if ! command -v python3 &> /dev/null; then
     echo "❌ Python 3 未安装"
