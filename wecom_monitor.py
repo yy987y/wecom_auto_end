@@ -119,8 +119,8 @@ def get_messages(focused, debug=False):
         # 只要聊天区域的（window.0.31.9）
         if 'window.0.31.9' not in path:
             continue
-        # 跳过侧边栏（window.0.26）
-        if 'window.0.26' in path:
+        # 跳过侧边栏（window.0.26 或 window.0.31.9.9）
+        if 'window.0.26' in path or 'window.0.31.9.9' in path:
             continue
         
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
