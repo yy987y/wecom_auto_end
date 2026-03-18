@@ -52,10 +52,13 @@ def scroll_to_bottom():
     pass
 
 def find_wecom_app():
-    for app in NSWorkspace.sharedWorkspace().runningApplications():
+    apps = NSWorkspace.sharedWorkspace().runningApplications()
+    for app in apps:
         name = app.localizedName() or ''
         if any(n.lower() in name.lower() for n in ['企业微信', 'WeCom', 'WXWork']):
             return app
+    # 调试：打印所有应用名称
+    print(f'DEBUG: 未找到企微，当前运行的应用: {[app.localizedName() for app in apps[:10]]}')
     return None
 
 def walk_collect(el, predicate, depth=0, max_depth=9, out=None, path='window'):
@@ -146,17 +149,10 @@ def get_messages(focused, debug=False):
         for i, (path, text, x) in enumerate(chat_texts[-20:], 1):
             print(f'  {i}. [x={x:.0f}] [{path}] {text[:80]}')
     
-    # 按路径分组，并根据 x 坐标判断是否是我方消息
+    # 按路径分组，并根据路径判断是否是我方消息
     messages = []
     current_group = []
     last_msg_id = None
-    
-    # 计算 x 坐标的中位数，用于判断左右
-    x_coords = [x for _, _, x in chat_texts if x > 0]
-    if x_coords:
-        median_x = sorted(x_coords)[len(x_coords) // 2]
-    else:
-        median_x = 500  # 默认值
     
     for path, text, x in chat_texts:
         # 提取消息ID（第7级，索引6）
@@ -169,9 +165,12 @@ def get_messages(focused, debug=False):
         # 如果消息ID变化，说明是新的消息
         if last_msg_id and msg_id != last_msg_id:
             if current_group:
-                # 判断是否是我方消息（右侧，x 坐标较大）
-                group_x = [x for _, x in current_group if x > 0]
-                is_our_message = any(x > median_x for x in group_x) if group_x else False
+                # 判断是否是我方消息：根据路径第8级（索引7）
+                # 企微中，我方消息通常在路径的特定位置
+                first_path = current_group[0][1]  # (text, path)
+                parts = first_path.split('.')
+                # 简单判断：如果路径较短或第8级是0，通常是客户消息（左侧）
+                is_our_message = len(parts) >= 8 and parts[7] != '0'
                 
                 # 组合消息内容
                 texts = [t for t, _ in current_group]
@@ -186,13 +185,14 @@ def get_messages(focused, debug=False):
                 })
             current_group = []
         
-        current_group.append((text, x))
+        current_group.append((text, path))
         last_msg_id = msg_id
     
     # 处理最后一组
     if current_group:
-        group_x = [x for _, x in current_group if x > 0]
-        is_our_message = any(x > median_x for x in group_x) if group_x else False
+        first_path = current_group[0][1]
+        parts = first_path.split('.')
+        is_our_message = len(parts) >= 8 and parts[7] != '0'
         
         texts = [t for t, _ in current_group]
         sender = '我方' if is_our_message else texts[0] if texts else ''
