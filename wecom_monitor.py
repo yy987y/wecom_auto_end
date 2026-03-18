@@ -118,6 +118,11 @@ def get_messages(focused, debug=False):
             continue
         parts = path.split('.')
         prefix = '.'.join(parts[:4]) if len(parts) >= 4 else path
+        
+        # 排除会话列表区域（window.0.31.2）
+        if prefix == 'window.0.31.2':
+            continue
+        
         if prefix not in path_groups:
             path_groups[prefix] = []
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
