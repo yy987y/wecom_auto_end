@@ -47,9 +47,19 @@ def role(el):
     return ax_str(el, kAXRoleAttribute) or '-'
 
 def scroll_to_bottom():
-    """模拟按下 Cmd+Down 滚动到底部 - 已禁用，会导致切换群"""
-    # 禁用：Cmd+Down 会触发企微切换群的快捷键
-    pass
+    """使用 AppleScript 滚动到底部"""
+    script = '''
+    tell application "System Events"
+        tell process "企业微信"
+            keystroke (key code 125 using {command down})
+        end tell
+    end tell
+    '''
+    try:
+        subprocess.run(['osascript', '-e', script], capture_output=True, timeout=2)
+        time.sleep(0.5)  # 等待滚动完成
+    except:
+        pass
 
 def find_wecom_app():
     for app in NSWorkspace.sharedWorkspace().runningApplications():
