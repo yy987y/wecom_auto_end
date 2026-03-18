@@ -126,6 +126,9 @@ def get_messages(focused, debug=False):
         if text:  # 只要有文本就保留
             chat_texts.append((path, text))
     
+    # 只取最新的30个
+    chat_texts = chat_texts[-30:] if len(chat_texts) > 30 else chat_texts
+    
     if debug:
         print(f'\n🔍 DEBUG: 聊天区域找到 {len(chat_texts)} 个文本元素（最后20个）')
         for i, (path, text) in enumerate(chat_texts[-20:], 1):
