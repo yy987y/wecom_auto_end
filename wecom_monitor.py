@@ -117,7 +117,6 @@ def get_messages(focused, debug=False):
     
     # 过滤出聊天区域的文本，并获取位置信息
     chat_texts = []
-    seen_texts = set()  # 用于去重
     for el, path in all_texts:
         # 只要聊天区域的（window.0.31.9）
         if 'window.0.31.9' not in path:
@@ -127,7 +126,7 @@ def get_messages(focused, debug=False):
             continue
         
         text = ax_str(el, kAXValueAttribute) or ax_str(el, kAXTitleAttribute) or ''
-        if text and text not in seen_texts:  # 去重
+        if text:
             # 获取位置信息
             try:
                 from ApplicationServices import AXUIElementCopyAttributeValue, kAXPositionAttribute
@@ -139,49 +138,41 @@ def get_messages(focused, debug=False):
                     chat_texts.append((path, text, 0))
             except:
                 chat_texts.append((path, text, 0))
-            seen_texts.add(text)
     
-    # 只取最新的30个
-    chat_texts = chat_texts[-30:] if len(chat_texts) > 30 else chat_texts
+    # 只取最新的50个（增加数量）
+    chat_texts = chat_texts[-50:] if len(chat_texts) > 50 else chat_texts
     
     if debug:
         print(f'\n🔍 DEBUG: 聊天区域找到 {len(chat_texts)} 个文本元素（最后20个）')
         for i, (path, text, x) in enumerate(chat_texts[-20:], 1):
             print(f'  {i}. [x={x:.0f}] [{path}] {text[:80]}')
     
-    # 按路径分组，并根据路径判断是否是我方消息
+    # 按路径分组
     messages = []
     current_group = []
     last_msg_id = None
     
     for path, text, x in chat_texts:
-        # 提取消息ID（第7级，索引6）
+        # 提取消息ID（第8级，索引7）
         parts = path.split('.')
-        if len(parts) >= 7:
-            msg_id = parts[6]
+        if len(parts) >= 8:
+            msg_id = parts[7]  # 第8级才是消息ID
         else:
             msg_id = path
         
         # 如果消息ID变化，说明是新的消息
         if last_msg_id and msg_id != last_msg_id:
             if current_group:
-                # 判断是否是我方消息：根据路径第8级（索引7）
-                # 企微中，我方消息通常在路径的特定位置
-                first_path = current_group[0][1]  # (text, path)
-                parts = first_path.split('.')
-                # 简单判断：如果路径较短或第8级是0，通常是客户消息（左侧）
-                is_our_message = len(parts) >= 8 and parts[7] != '0'
-                
                 # 组合消息内容
                 texts = [t for t, _ in current_group]
-                sender = '我方' if is_our_message else texts[0] if texts else ''
-                content = ' '.join(texts[1:]) if len(texts) > 1 and not is_our_message else ' '.join(texts)
+                # 第一个文本作为发送者（如果包含时间或@符号，可能是发送者）
+                sender = texts[0] if texts else ''
+                content = ' '.join(texts[1:]) if len(texts) > 1 else texts[0] if texts else ''
                 
                 messages.append({
                     'sender': sender,
                     'content': content,
-                    'body': ' '.join(texts),
-                    'is_our': is_our_message
+                    'body': ' '.join(texts)
                 })
             current_group = []
         
@@ -190,19 +181,14 @@ def get_messages(focused, debug=False):
     
     # 处理最后一组
     if current_group:
-        first_path = current_group[0][1]
-        parts = first_path.split('.')
-        is_our_message = len(parts) >= 8 and parts[7] != '0'
-        
         texts = [t for t, _ in current_group]
-        sender = '我方' if is_our_message else texts[0] if texts else ''
-        content = ' '.join(texts[1:]) if len(texts) > 1 and not is_our_message else ' '.join(texts)
+        sender = texts[0] if texts else ''
+        content = ' '.join(texts[1:]) if len(texts) > 1 else texts[0] if texts else ''
         
         messages.append({
             'sender': sender,
             'content': content,
-            'body': ' '.join(texts),
-            'is_our': is_our_message
+            'body': ' '.join(texts)
         })
     
     # 只返回最后 20 条
