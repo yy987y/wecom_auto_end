@@ -4,16 +4,26 @@
 本地三态判断：not_end / strong_end_candidate / uncertain
 """
 import re
+import yaml
+from pathlib import Path
 
-# 关键词词典
-THANK_WORDS = ['谢谢', '感谢', '辛苦', '多谢', '谢了']
-CONFIRM_WORDS = ['好的', 'ok', 'OK', '可以', '明白', '收到', '行', '好']
-PROMISE_WORDS = ['确认后答复', '稍后答复', '稍后回复', '明天回复', '下周一', '周五我们会提供', 
-                 '会提供', '安排研发处理', '让研发处理', '跟进后同步', '确认后回你',
-                 '有结论随时同步', '有结论同步', '随时同步', '确认后同步', '处理后同步',
-                 '稍后联系', '明天联系', '后续跟进', '持续跟进']
-SOLVED_WORDS = ['已修复', '已经修复', '解决了', '已处理', '可以了', '恢复正常', '已经解决']
-NEW_QUESTION_WORDS = ['还有个问题', '另外问', '再问一下', '顺便问', '还有一个']
+# 加载关键词配置
+def load_keywords():
+    config_file = Path(__file__).parent / 'keywords.yaml'
+    if config_file.exists():
+        with open(config_file, 'r', encoding='utf-8') as f:
+            return yaml.safe_load(f)
+    # 默认配置
+    return {
+        'customer_confirm': {'score': 3, 'keywords': ['好的', 'OK', 'ok', '可以', '明白', '收到']},
+        'customer_thanks': {'score': 2, 'keywords': ['谢谢', '感谢', '多谢']},
+        'our_promise': {'score': 2, 'keywords': ['稍后', '明天', '下周']},
+        'problem_solved': {'score': 2, 'keywords': ['已解决', '已修复']},
+        'new_problem': {'score': -5, 'keywords': ['还有个问题', '另外', '再问一下']},
+        'thresholds': {'strong_end': 4, 'keep': 0}
+    }
+
+KEYWORDS_CONFIG = load_keywords()
 
 def normalize_text(text):
     """文本归一化"""
@@ -49,11 +59,11 @@ def calculate_end_score(messages):
     
     # 检查最后一条是否是客户确认
     if not is_my_side(last_sender):
-        if contains_keywords(last_text, CONFIRM_WORDS):
-            score += 3
+        if contains_keywords(last_text, KEYWORDS_CONFIG['customer_confirm']['keywords']):
+            score += KEYWORDS_CONFIG['customer_confirm']['score']
             reasons.append('客户确认词')
-        if contains_keywords(last_text, THANK_WORDS):
-            score += 2
+        if contains_keywords(last_text, KEYWORDS_CONFIG['customer_thanks']['keywords']):
+            score += KEYWORDS_CONFIG['customer_thanks']['score']
             reasons.append('客户感谢词')
     
     # 检查最近是否有我方承诺/解决
@@ -61,18 +71,18 @@ def calculate_end_score(messages):
         sender = msg.get('sender') or ''
         text = msg.get('content') or msg.get('body') or ''
         if is_my_side(sender):
-            if contains_keywords(text, PROMISE_WORDS):
-                score += 4  # 提高权重，直接触发关闭
-                reasons.append('我方明确承诺')
-            if contains_keywords(text, SOLVED_WORDS):
-                score += 2
-                reasons.append('我方已解决')
+            if contains_keywords(text, KEYWORDS_CONFIG['our_promise']['keywords']):
+                score += KEYWORDS_CONFIG['our_promise']['score']
+                reasons.append('我方承诺')
+            if contains_keywords(text, KEYWORDS_CONFIG['problem_solved']['keywords']):
+                score += KEYWORDS_CONFIG['problem_solved']['score']
+                reasons.append('问题已解决')
     
     # 检查是否有新问题信号
     for msg in recent:
         text = msg.get('content') or msg.get('body') or ''
-        if contains_keywords(text, NEW_QUESTION_WORDS):
-            score -= 5
+        if contains_keywords(text, KEYWORDS_CONFIG['new_problem']['keywords']):
+            score += KEYWORDS_CONFIG['new_problem']['score']
             reasons.append('检测到新问题')
             break
     
@@ -88,13 +98,14 @@ def judge_end_status(messages):
         return 'not_end', 0.0, '消息数不足'
     
     score, score_reason = calculate_end_score(messages)
+    thresholds = KEYWORDS_CONFIG.get('thresholds', {'strong_end': 4, 'keep': 0})
     
     # 强未结束
-    if score < 0:
+    if score < thresholds['keep']:
         return 'not_end', 0.9, f'评分{score}: {score_reason}'
     
     # 强收口候选
-    if score >= 4:
+    if score >= thresholds['strong_end']:
         return 'strong_end_candidate', 0.8, f'评分{score}: {score_reason}'
     
     # 不确定
