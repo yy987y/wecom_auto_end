@@ -136,6 +136,50 @@ def get_group_name(focused):
     scored.sort(reverse=True)
     return scored[0][1] if scored else None
 
+def _filter_main_chat_thread(chat_prefix, chat_texts):
+    """尽量只保留聊天正文主链，排除群成员/资料卡/侧边说明等分支。"""
+    if not chat_texts:
+        return chat_texts
+
+    # 先按 chat_prefix 下的第一级子分支聚类，例如 window.0.29.9.0 / .1 / .2
+    branch_groups = {}
+    for path, text in chat_texts:
+        suffix = path[len(chat_prefix):].lstrip('.')
+        first_seg = suffix.split('.', 1)[0] if suffix else '_root'
+        branch_key = f'{chat_prefix}.{first_seg}' if first_seg != '_root' else chat_prefix
+        branch_groups.setdefault(branch_key, []).append((path, text))
+
+    def score_branch(items):
+        score = 0
+        unique_paths = len({p for p, _ in items})
+        score += min(unique_paths, 80)
+
+        texts = [t.strip() for _, t in items if t and t.strip()]
+        long_texts = sum(1 for t in texts if len(t) >= 8)
+        score += long_texts * 2
+
+        # 会话列表/群成员区域常见特征，做降权
+        penalty_keywords = ['刚刚', '分钟前', '昨天', '周一', '周二', '周三', '周四', '周五', '周六', '周日', '群主:', '外部联系人']
+        penalty = sum(1 for t in texts if any(k in t for k in penalty_keywords))
+        score -= penalty * 3
+
+        # 大量纯人名/短 token 的分支通常不是正文
+        short_texts = sum(1 for t in texts if len(t) <= 4)
+        score -= short_texts
+        return score
+
+    best_branch_key = max(branch_groups.keys(), key=lambda k: score_branch(branch_groups[k]))
+    best_items = branch_groups[best_branch_key]
+
+    # 兼容旧版经验路径：如果能识别到 0.0.0 主链，则优先使用更深的主链
+    preferred_prefix = f'{chat_prefix}.0.0.0.'
+    preferred_items = [(p, t) for p, t in best_items if p.startswith(preferred_prefix)]
+    if preferred_items:
+        return preferred_items
+
+    return best_items
+
+
 def get_messages(focused, debug=False):
     # 先滚动到底部，确保最新消息可见
     scroll_to_bottom()

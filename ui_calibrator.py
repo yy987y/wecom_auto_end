@@ -75,6 +75,7 @@ def prompt_choice(candidates, label):
 
 
 def confirm_preview(focused, chat_prefix):
+    # 临时写入 mapping，让 get_messages() 按当前选择的 chat_prefix 做真实解析
     mapping = {
         'chat_prefix': chat_prefix,
         'session_list_prefix': None,
