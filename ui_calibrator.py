@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """
-UI 校准工具：首次校准时确认当前群名 + 当前聊天区预览。
+UI 校准工具：首次校准时确认当前群名 + 当前聊天区。
 """
 import json
-from datetime import datetime
 from pathlib import Path
 
 from ApplicationServices import (
@@ -17,9 +16,10 @@ from wecom_monitor import (
     ax_copy,
     ax_str,
     find_wecom_app,
+    get_group_name,
+    get_messages,
     role,
     walk_collect,
-    get_group_name,
 )
 
 WS = Path(__file__).parent
@@ -56,7 +56,6 @@ def collect_candidates(focused):
             'prefix': prefix,
             'count': len(items),
             'samples': samples,
-            'items': items,
         })
     return candidates
 
@@ -71,45 +70,42 @@ def prompt_choice(candidates, label):
     while True:
         choice = input(f'输入 {label} 编号: ').strip()
         if choice.isdigit() and 1 <= int(choice) <= len(candidates):
-            return candidates[int(choice) - 1]
+            return candidates[int(choice) - 1]['prefix']
         print('输入无效，请重试。')
 
 
-def build_chat_preview(candidate):
-    chat_prefix = candidate['prefix']
-    chat_texts = candidate['items']
+def confirm_preview(focused, chat_prefix):
+    mapping = {
+        'chat_prefix': chat_prefix,
+        'session_list_prefix': None,
+    }
+    UI_MAPPING_FILE.write_text(json.dumps(mapping, ensure_ascii=False, indent=2), encoding='utf-8')
 
-    if chat_prefix == 'window.0.31.9':
-        main_thread_prefix = 'window.0.31.9.0.0.0.'
-        filtered_chat_texts = [(path, text) for path, text in chat_texts if path.startswith(main_thread_prefix)]
-        if filtered_chat_texts:
-            chat_texts = filtered_chat_texts
+    group_name = get_group_name(focused)
+    messages = get_messages(focused, debug=False)
 
-    preview = chat_texts[-12:] if len(chat_texts) > 12 else chat_texts
-    return chat_texts, preview
-
-
-def confirm_current_context(group_name, candidate):
-    chat_texts, preview = build_chat_preview(candidate)
-
-    print('\n📌 首次校准确认')
-    print(f'  群名识别结果: {group_name or "(未识别到)"}')
-    print(f'  聊天区路径: {candidate["prefix"]}')
-    print(f'  聊天区文本数: {len(chat_texts)}')
-    print('\n🧾 当前聊天区预览（末尾样本）:')
-    if preview:
-        for path, text in preview:
-            print(f'  - [{path}] {text[:120]}')
+    print('\n📌 首次校准确认结果')
+    print(f'当前群名: {group_name or "(未识别)"}')
+    print(f'解析消息数: {len(messages)}')
+    print('最近消息预览:')
+    if not messages:
+        print('  (未解析到聊天内容)')
     else:
-        print('  (无可预览文本)')
+        for idx, msg in enumerate(messages[-8:], 1):
+            sender = (msg.get('sender') or '').strip()
+            content = (msg.get('content') or '').strip()
+            body = (msg.get('body') or '').strip()
+            line = body or f'{sender} {content}'.strip() or '(空)'
+            print(f'  {idx}. {line[:160]}')
 
+    print('\n请确认以上“群名 + 当前聊天区域”是否正确。')
     while True:
-        answer = input('\n上述“群名 + 当前聊天区”是否正确？(y/n): ').strip().lower()
-        if answer in ('y', 'yes'):
-            return True, chat_texts
-        if answer in ('n', 'no'):
-            return False, chat_texts
-        print('请输入 y 或 n。')
+        choice = input('确认无误？(y/n): ').strip().lower()
+        if choice in ('y', 'yes'):
+            return mapping, group_name, messages
+        if choice in ('n', 'no'):
+            return None, group_name, messages
+        print('输入无效，请输入 y 或 n。')
 
 
 def main():
@@ -129,26 +125,19 @@ def main():
         print('❌ 未扫描到候选区域。')
         return 1
 
-    current_group = get_group_name(focused)
-
-    print('\n🔍 扫描到以下候选聊天区域：')
-    chat_candidate = prompt_choice(candidates, '聊天区')
-    ok, chat_texts = confirm_current_context(current_group, chat_candidate)
-    if not ok:
-        print('\n⚠️ 请切到正确会话后重新运行校准，或重新选择更合适的聊天区。')
-        return 1
-
-    mapping = {
-        'chat_prefix': chat_candidate['prefix'],
-        'session_list_prefix': None,
-        'calibration_group_name': current_group,
-        'calibration_chat_preview': [text for _, text in chat_texts[-8:]],
-        'calibrated_at': datetime.now().isoformat(timespec='seconds'),
-    }
-    UI_MAPPING_FILE.write_text(json.dumps(mapping, ensure_ascii=False, indent=2), encoding='utf-8')
-    print(f'\n✅ UI 映射已保存到: {UI_MAPPING_FILE}')
-    print(json.dumps(mapping, ensure_ascii=False, indent=2))
-    return 0
+    while True:
+        print('\n🔍 扫描到以下候选聊天区域：')
+        chat_prefix = prompt_choice(candidates, '聊天区')
+        confirmed, group_name, messages = confirm_preview(focused, chat_prefix)
+        if confirmed:
+            print(f'\n✅ UI 映射已保存到: {UI_MAPPING_FILE}')
+            print(json.dumps({
+                **confirmed,
+                'calibrated_group_name': group_name,
+                'preview_message_count': len(messages),
+            }, ensure_ascii=False, indent=2))
+            return 0
+        print('\n↩️ 预览不对，重新选择聊天区。')
 
 
 if __name__ == '__main__':
