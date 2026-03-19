@@ -166,7 +166,7 @@ fi
 if [ "$CALIBRATE_ONLY" = true ] || [ ! -f "data/ui_mapping.json" ]; then
     echo ""
     echo "🧭 启动前 UI 校准..."
-    echo "请先把企业微信切到目标会话窗口，再根据输出选择聊天区/会话列表"
+    echo "请先把企业微信切到目标会话窗口，再根据输出确认当前群名 + 当前聊天区"
     echo ""
     "$VENV_PY" ui_calibrator.py
     if [ "$CALIBRATE_ONLY" = true ]; then
