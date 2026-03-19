@@ -19,7 +19,7 @@ func axChildren(_ element: AXUIElement) -> [AXUIElement] {
 }
 
 func role(_ e: AXUIElement) -> String { axString(e, kAXRoleAttribute) ?? "-" }
-func title(_ e: AXUIElement) -> String { axString(e, kAXTitleAttribute) ?? "" }
+func title(_ e: AXUIElement) -> String { axString(e, kAXTitleAttribute) ?? "-" }
 
 func parentOf(_ element: AXUIElement) -> AXUIElement? {
     var value: CFTypeRef?
@@ -63,7 +63,7 @@ guard let app = findWeComApp() else { print("❌ 未找到企业微信进程"); 
 let appEl = AXUIElementCreateApplication(app.processIdentifier)
 guard let focused = focusedWindow(of: appEl) else { print("❌ 未获取到 Focused Window"); exit(1) }
 
-guard let qm = findElement(focused, matcher: { e in
+guard let qm = findElement(focused, matcher: { e in 
     role(e) == "AXButton" && (
         title(e).localizedCaseInsensitiveContains("Quick Meeting") ||
         title(e).contains("快速会议")
@@ -77,6 +77,25 @@ guard let parent = parentOf(qm) else { print("❌ 未找到 Quick Meeting parent
 let siblings = axChildren(parent)
 let qmIndex = siblings.firstIndex(where: { $0 == qm }) ?? -1
 
+// 先完全兼容 00c1a46 / a0b1a05 的稳定策略：直接找 sib13
+let legacyCandidates = siblings
+    .enumerated()
+    .compactMap { pair -> (Int, AXUIElement, String)? in
+        let (idx, e) = pair
+        guard role(e) == "AXButton" else { return nil }
+        let t = title(e)
+        if !t.isEmpty && t != "Quick Meeting" && !t.contains("快速会议") { return nil }
+        return (idx, e, t)
+    }
+
+if let (_, btn, btnTitle) = legacyCandidates.first(where: { $0.0 == 13 }) {
+    let err = AXUIElementPerformAction(btn, kAXPressAction as CFString)
+    let titleDesc = btnTitle.isEmpty ? "<empty>" : btnTitle
+    print(err == .success ? "✅ 已点击候选侧边栏按钮(sib13, title=\(titleDesc))" : "❌ 点击 sib13 失败: \(err.rawValue)")
+    if err == .success { exit(0) }
+}
+
+// 新布局兜底：再尝试 Quick Meeting 右侧按钮
 let rightButtons = siblings
     .enumerated()
     .compactMap { pair -> (Int, AXUIElement, String)? in
@@ -86,28 +105,19 @@ let rightButtons = siblings
         return (idx, e, title(e))
     }
 
-let untitledCandidates = rightButtons.filter { $0.2.isEmpty }
+let untitledRightButtons = rightButtons.filter { $0.2 == "-" || $0.2.isEmpty }
+let fallbackCandidate = untitledRightButtons.first ?? rightButtons.first
 
-// 兼容策略：
-// 1) 优先使用你之前验证稳定的 sib13
-// 2) 如果 sib13 不存在，则取 Quick Meeting 右侧第一个无标题按钮
-// 3) 最后兜底取右侧第一个按钮，并打印标题帮助调试
-let candidate =
-    untitledCandidates.first(where: { $0.0 == 13 }) ??
-    untitledCandidates.first ??
-    rightButtons.first
-
-if let (idx, btn, btnTitle) = candidate {
+if let (idx, btn, btnTitle) = fallbackCandidate {
     let err = AXUIElementPerformAction(btn, kAXPressAction as CFString)
-    if err == .success {
-        let titleDesc = btnTitle.isEmpty ? "<empty>" : btnTitle
-        print("✅ 已点击候选侧边栏按钮(sib\(idx), title=\(titleDesc))")
-    } else {
-        print("❌ 点击失败: \(err.rawValue)")
-    }
+    let titleDesc = btnTitle.isEmpty ? "<empty>" : btnTitle
+    print(err == .success ? "✅ 已点击候选侧边栏按钮(sib\(idx), title=\(titleDesc))" : "❌ 点击失败: \(err.rawValue)")
 } else {
-    let debugList = rightButtons.map { "sib\($0.0):\($0.2.isEmpty ? "<empty>" : $0.2)" }.joined(separator: ", ")
+    let legacyDebug = legacyCandidates.map { "sib\($0.0):\($0.2)" }.joined(separator: ", ")
+    let rightDebug = rightButtons.map { "sib\($0.0):\($0.2)" }.joined(separator: ", ")
     print("❌ 未找到候选按钮")
-    print("右侧按钮: [\(debugList)]")
+    print("全部候选: [\(legacyDebug)]")
+    print("右侧按钮: [\(rightDebug)]")
+    print("Quick Meeting 索引: \(qmIndex)")
     exit(4)
 }
