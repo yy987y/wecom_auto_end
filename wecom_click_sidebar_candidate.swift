@@ -19,7 +19,7 @@ func axChildren(_ element: AXUIElement) -> [AXUIElement] {
 }
 
 func role(_ e: AXUIElement) -> String { axString(e, kAXRoleAttribute) ?? "-" }
-func title(_ e: AXUIElement) -> String { axString(e, kAXTitleAttribute) ?? "-" }
+func title(_ e: AXUIElement) -> String { axString(e, kAXTitleAttribute) ?? "" }
 
 func parentOf(_ element: AXUIElement) -> AXUIElement? {
     var value: CFTypeRef?
@@ -63,7 +63,7 @@ guard let app = findWeComApp() else { print("❌ 未找到企业微信进程"); 
 let appEl = AXUIElementCreateApplication(app.processIdentifier)
 guard let focused = focusedWindow(of: appEl) else { print("❌ 未获取到 Focused Window"); exit(1) }
 
-guard let qm = findElement(focused, matcher: { e in 
+guard let qm = findElement(focused, matcher: { e in
     role(e) == "AXButton" && (
         title(e).localizedCaseInsensitiveContains("Quick Meeting") ||
         title(e).contains("快速会议")
@@ -75,26 +75,39 @@ guard let qm = findElement(focused, matcher: { e in
 
 guard let parent = parentOf(qm) else { print("❌ 未找到 Quick Meeting parent"); exit(3) }
 let siblings = axChildren(parent)
-
-// 选 Quick Meeting 右侧的无标题按钮
 let qmIndex = siblings.firstIndex(where: { $0 == qm }) ?? -1
-let candidates = siblings
+
+let rightButtons = siblings
     .enumerated()
-    .compactMap { (idx, e) -> (Int, AXUIElement)? in
+    .compactMap { pair -> (Int, AXUIElement, String)? in
+        let (idx, e) = pair
         guard role(e) == "AXButton" else { return nil }
-        let t = title(e)
-        if !t.isEmpty { return nil }  // 只要无标题按钮
-        if idx <= qmIndex { return nil }  // 只要右侧
-        return (idx, e)
+        guard idx > qmIndex else { return nil }
+        return (idx, e, title(e))
     }
 
-// 优先索引13，否则取第一个
-let candidate = candidates.first(where: { $0.0 == 13 }) ?? candidates.first
+let untitledCandidates = rightButtons.filter { $0.2.isEmpty }
 
-if let (idx, btn) = candidate {
+// 兼容策略：
+// 1) 优先使用你之前验证稳定的 sib13
+// 2) 如果 sib13 不存在，则取 Quick Meeting 右侧第一个无标题按钮
+// 3) 最后兜底取右侧第一个按钮，并打印标题帮助调试
+let candidate =
+    untitledCandidates.first(where: { $0.0 == 13 }) ??
+    untitledCandidates.first ??
+    rightButtons.first
+
+if let (idx, btn, btnTitle) = candidate {
     let err = AXUIElementPerformAction(btn, kAXPressAction as CFString)
-    print(err == .success ? "✅ 已点击候选侧边栏按钮(sib\(idx))" : "❌ 点击失败: \(err.rawValue)")
+    if err == .success {
+        let titleDesc = btnTitle.isEmpty ? "<empty>" : btnTitle
+        print("✅ 已点击候选侧边栏按钮(sib\(idx), title=\(titleDesc))")
+    } else {
+        print("❌ 点击失败: \(err.rawValue)")
+    }
 } else {
+    let debugList = rightButtons.map { "sib\($0.0):\($0.2.isEmpty ? "<empty>" : $0.2)" }.joined(separator: ", ")
     print("❌ 未找到候选按钮")
+    print("右侧按钮: [\(debugList)]")
     exit(4)
 }
