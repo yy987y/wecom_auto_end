@@ -67,6 +67,9 @@ def _load_from_persistent_profile():
         context = p.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
             headless=True,
+            locale="zh-CN",
+            timezone_id="Asia/Shanghai",
+            args=["--lang=zh-CN"],
         )
         try:
             page = context.new_page()
