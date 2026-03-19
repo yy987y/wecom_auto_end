@@ -6,3 +6,4 @@ logs/
 credentials.local.yaml
 data/.cookies.json
 data/.qiyu_cookies.json
+data/ui_mapping.json
